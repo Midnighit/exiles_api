@@ -454,7 +454,7 @@ class OwnersCache(UsersBase, Owner):
         if not 0 in owners:
             owners[0] = 'Game Assets'
         if not 11 in owners:
-            owners[11] = 'Ruins'
+            owners[RUINS_CLAN_ID] = 'Ruins'
         for id, name in owners.items():
             if not id in cache:
                 new_owner = OwnersCache(id=id, name=name)
@@ -485,22 +485,23 @@ class ObjectsCache(UsersBase):
     @staticmethod
     def update():
         objects = cache = {}
-        results = session.query(Guilds.id, Guilds.name).filter(Guilds.name!='Ruins').all()
-        owners = {owner[0]: owner[1] for owner in results}
-        results = session.query(Characters.id, Characters.name).filter(Characters.name!='Ruins').all()
-        owners.update({owner[0]: owner[1] for owner in results})
-        cache = {owner.id: owner.name for owner in session.query(OwnersCache).all()}
-        if not 0 in owners:
-            owners[0] = 'Game Assets'
-        if not 11 in owners:
-            owners[11] = 'Ruins'
-        for id, name in owners.items():
+        sqGuilds = session.query(Guilds.id)
+        sqChars = session.query(Characters.id)
+        objects = {obj[0] for obj in session.query(Buildings.object_id).filter(
+            Buildings.owner_id.notin_(sqChars) &
+            Buildings.owner_id.notin_(sqGuilds) &
+            (Buildings.owner_id != 0) |
+            (Buildings.owner_id == RUINS_CLAN_ID)).all()}
+        cache = {obj.id: obj.owner_unknown_since for obj in session.query(ObjectsCache).all()}
+        for id, dt in cache.items():
+            if not id in objects:
+                del_obj = session.query.get(id)
+                session.delete(del_obj)
+        now = int(datetime.utcnow().timestamp())
+        for id in objects:
             if not id in cache:
-                new_owner = OwnersCache(id=id, name=name)
-                session.add(new_owner)
-            elif cache[id] != owners[id]:
-                changed_owner = session.query(OwnersCache).get(id)
-                changed_owner.name = name
+                new_obj = ObjectsCache(id=id, _timestamp=now)
+                session.add(new_obj)
         session.commit()
 
     @property
