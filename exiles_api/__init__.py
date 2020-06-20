@@ -1,9 +1,9 @@
 from config import *
 from datetime import datetime
 from sqlalchemy import create_engine, desc, MetaData
-from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float
+from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean
 
 GameBase = declarative_base()
 UsersBase = declarative_base()
@@ -40,43 +40,265 @@ def db_date():
 # non-db classes
 class Player:
     def __init__(self, **kwargs):
-        self.SteamID64 = kwargs.get("SteamID64")
-        self._disc_user = kwargs.get("disc_user")
-        if self.SteamID64:
+        self.id = kwargs.get("id")
+        if self.id:
+            self.id = str(self.id)
+            self.real_id = self.id if len(self.id) <= 2 or self.id[-2] != '#' else self.id[:-2]
+        else:
+            self.real_id = None
+        self.funcom_id = kwargs.get("funcom_id")
+        self.steam_id = kwargs.get("steam_id")
+        self.disc_user = kwargs.get("disc_user")
+        if self.disc_user and (len(self.disc_user) <= 5 or self.disc_user[-5] != '#'):
+            self._get_disc_user_by_disc_short()
+        # print(f"attributes after assigning kwargs: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+        found_attributes = num_attributes = self._get_num_attributes()
+        while(found_attributes > 0):
+            if not self.id:
+                if self.funcom_id:
+                    self._get_player_id_by_funcom_id()
+                    # print(f"attributes after fcid =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.id and self.steam_id:
+                    self._get_player_id_by_steam_id()
+                    # print(f"attributes after stid =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.id and self.disc_user:
+                    self._get_player_id_by_disc_user()
+                    # print(f"attributes after   du =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+            if not self.funcom_id:
+                if self.id:
+                    self._get_funcom_id_by_player_id()
+                    # print(f"attributes after   id => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.funcom_id and self.steam_id:
+                    self._get_funcom_id_by_steam_id()
+                    # print(f"attributes after stid => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.funcom_id and self.disc_user:
+                    self._get_funcom_id_by_disc_user()
+                    # print(f"attributes after   du => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+            if not self.steam_id:
+                if self.id:
+                    self._get_steam_id_by_player_id()
+                    # print(f"attributes after   id => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.steam_id and self.funcom_id:
+                    self._get_steam_id_by_funcom_id()
+                    # print(f"attributes after fcid => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.steam_id and self.disc_user:
+                    self._get_steam_id_by_disc_user()
+                    # print(f"attributes after   du => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+            if not self.disc_user:
+                if self.id:
+                    self._get_disc_user_by_player_id()
+                    # print(f"attributes after   id =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.disc_user and self.funcom_id:
+                    self._get_disc_user_by_funcom_id()
+                    # print(f"attributes after fcid =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+                if not self.disc_user and self.steam_id:
+                    self._get_disc_user_by_steam_id()
+                    # print(f"attributes after stid =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+                    if self._has_all_attributes():
+                        break
+            new_num_attributes = self._get_num_attributes()
+            found_attributes = new_num_attributes - num_attributes
+            num_attributes = new_num_attributes
+
+        if self.real_id:
             self.characters = [c for c in session.query(Characters)
-                                                 .filter(Characters.SteamID64.like(self.SteamID64 + '%')).all()]
-            result = session.query(Users.disc_user).filter_by(SteamID64=self.SteamID64).first()
-            self.disc_user = result[0] if result else None
+                                                 .filter(Characters.player_id.like(self.real_id + '#_') |
+                                                        (Characters.player_id==self.real_id)).all()]
         else:
             self.characters = []
 
-    def __repr__(self):
+    def _has_all_attributes(self):
+        return self.id is not None and \
+               self.funcom_id is not None and \
+               self.steam_id is not None and \
+               self.disc_user is not None
+
+    def _get_num_attributes(self):
+        num = 0
+        if self.id:
+            num += 1
+        if self.funcom_id:
+            num += 1
+        if self.steam_id:
+            num += 1
         if self.disc_user:
-            return f"<Player(SteamID64={self.SteamID64}', disc_user={self.disc_user})>"
-        return f"<Player(SteamID64={self.SteamID64}')>"
+            num += 1
+        return num
+
+    def _get_disc_user_by_disc_short(self):
+        result = session.query(Users.disc_user).filter(Users.disc_user.like((self.disc_user + '#____'))).first()
+        if result:
+            self.disc_user = result[0]
+            return
+        result = session.query(Users.disc_user).filter(Users.disc_user.like(('%' + self.disc_user + '%#____'))).first()
+        if result:
+            self.disc_user = result[0]
+
+    def _get_player_id_by_funcom_id(self):
+        result = session.query(Account.player_id).filter_by(funcom_id=self.funcom_id).first()
+        if result:
+            self.real_id = self.id = str(result[0])
+
+    def _get_player_id_by_steam_id(self):
+        self._get_funcom_id_by_steam_id()
+        if self.funcom_id and not self.id:
+            self._get_player_id_by_funcom_id()
+        # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
+        result = session.query(Account.player_id).filter_by(funcom_id=self.steam_id).first()
+        if result:
+            self.real_id = self.id = str(result[0])
+
+    def _get_player_id_by_disc_user(self):
+        user = session.query(Users).filter_by(disc_user=self.disc_user).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.funcom_id = user.funcom_id or self.funcom_id
+            if user.player_id:
+                self.real_id = self.id = str(user.player_id)
+            # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
+            if not self.id:
+                result = session.query(Account.player_id).filter_by(funcom_id=self.steam_id).first()
+                if result:
+                    self.real_id = self.id = str(result[0])
+
+    def _get_funcom_id_by_player_id(self):
+        result = session.query(Account.funcom_id).filter_by(player_id=self.real_id).first()
+        if result and len(result[0]) == 16:
+            self.funcom_id = result[0]
+        elif result and len(result[0]) == 17:
+            self.steam_id = result[0]
+
+    def _get_funcom_id_by_steam_id(self):
+        result = session.query(Steam64.funcom_id).filter_by(id=self.steam_id).first()
+        if result and len(result[0]) == 16:
+            self.funcom_id = result[0]
+        else:
+            user = session.query(Users).filter_by(steam_id=self.steam_id).first()
+            if user:
+                self.disc_user = user.disc_user or self.disc_user
+                self.funcom_id = user.funcom_id
+                if user.player_id:
+                    self.real_id = str(user.player_id)
+                self.id = self.id or self.real_id
+
+    def _get_funcom_id_by_disc_user(self):
+        self._get_player_id_by_disc_user()
+
+    def _get_steam_id_by_player_id(self):
+        self._get_funcom_id_by_player_id()
+        self._get_steam_id_by_funcom_id()
+
+    def _get_steam_id_by_funcom_id(self):
+        result = session.query(Steam64.id).filter_by(funcom_id=self.funcom_id).first()
+        if result:
+            self.steam_id = result[0]
+        else:
+            user = session.query(Users).filter_by(funcom_id=self.funcom_id).first()
+            if user:
+                self.steam_id = user.steam_id
+                self.disc_user = user.disc_user or self.disc_user
+                if user.player_id:
+                    self.real_id = str(user.player_id)
+                self.id = self.id or self.real_id
+
+    def _get_steam_id_by_disc_user(self):
+        result = session.query(Users.steam_id).filter_by(disc_user=self.disc_user).first()
+        if result:
+            self.steam_id = result[0]
+
+    def _get_disc_user_by_player_id(self):
+        self._get_funcom_id_by_player_id()
+        self._get_disc_user_by_funcom_id()
+
+    def _get_disc_user_by_funcom_id(self):
+        user = session.query(Users).filter_by(funcom_id=self.funcom_id).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.disc_user = user.disc_user
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.id = self.id or self.real_id
+
+    def _get_disc_user_by_steam_id(self):
+        user = session.query(Users).filter_by(steam_id=self.steam_id).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.disc_user = user.disc_user
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.id = self.id or self.real_id
+
+    def __repr__(self):
+        return f"<Player(player_id={str(self.id)}, funcom_id={str(self.funcom_id)}, steam_id={str(self.steam_id)}, disc_user={str(self.disc_user)})>"
 
     @property
-    def SteamID64(self):
-        return self._SteamID64
+    def id(self):
+        return self._id
 
-    @SteamID64.setter
-    def SteamID64(self, SteamID64):
-        if SteamID64 is None:
-            self._SteamID64 = None
+    @id.setter
+    def id(self, value):
+        self._id = value
+
+    @property
+    def funcom_id(self):
+        return self._funcom_id
+
+    @funcom_id.setter
+    def funcom_id(self, value):
+        self._funcom_id = value
+
+    @property
+    def steam_id(self):
+        return self._steam_id
+
+    @steam_id.setter
+    def steam_id(self, value):
+        if value is None:
+            self._steam_id = None
             return
-        if not SteamID64 is str:
+        if not value is str:
             try:
-                SteamID64 = str(SteamID64)
+                value = str(value)
             except:
-                raise ValueError("SteamID64 must be a string.")
-        if not SteamID64:
-            raise ValueError("Missing argument SteamID64")
-        if not SteamID64.isnumeric():
-            raise ValueError("SteamID64 may only contain numeric characterrs.")
-        if not len(SteamID64) == 17:
-            raise ValueError("SteamID64 must have 17 digits.")
-        self._SteamID64 = SteamID64
+                raise ValueError("steam_id must be a string.")
+        if not value:
+            raise ValueError("Missing argument steam_id")
+        if not value.isnumeric():
+            raise ValueError("steam_id may only contain numeric characterrs.")
+        if not len(value) == 17:
+            raise ValueError("steam_id must have 17 digits.")
+        self._steam_id = value
         return
+
+    @property
+    def disc_user(self):
+        return self._disc_user
+
+    @disc_user.setter
+    def disc_user(self, value):
+        self._disc_user = value
 
     @property
     def characters(self):
@@ -85,14 +307,6 @@ class Player:
     @characters.setter
     def characters(self, characters):
         self._characters = characters
-
-    @property
-    def disc_user(self):
-        return self._disc_user
-
-    @disc_user.setter
-    def disc_user(self, disc_user):
-        self._disc_user = disc_user
 
 class Owner:
     def is_inactive(self, td):
@@ -161,6 +375,7 @@ class Placeables(Tiles):
 class CharList(tuple):
     def last_to_login(self):
         last = datetime(year=1970, month=1, day=1)
+        res = None
         for c in self:
             if c.last_login > last:
                 res = c
@@ -211,10 +426,31 @@ class Account(GameBase):
     __tablename__ = 'account'
     __table_args__ = {'autoload': True}
     __bind_key__ = 'gamedb'
-    SteamID64 = Column('user', ForeignKey('characters.SteamID64'), primary_key=True, nullable=False)
+    player_id = Column('id', Text, ForeignKey('characters.playerId'), primary_key=True, nullable=False)
+    funcom_id = Column('user', Text, ForeignKey('steam64.id'), nullable=False)
+    # relationship
+    _character = relationship('Characters', back_populates='_account')
+    # relationship('Characters', backref="account")
+
+    @property
+    def characters(self):
+        query = session.query(Characters) \
+                       .filter(Characters.player_id.like((str(self._character.player_id) + '#_')) |
+                              (Characters.player_id==self._character.player_id)) \
+                       .order_by(Characters.player_id)
+        return tuple(c for c in query.all())
+
+    @property
+    def user(self):
+        query = session.query(Users).filter((Users.funcom_id==self.funcom_id) | (Users.player_id==self.player_id))
+        return query.first()
+
+    @property
+    def player(self):
+        return Player(id=self.player_id, funcom_id=self.funcom_id)
 
     def __repr__(self):
-        return f"<Account(SteamID64={self.SteamID64})>"
+        return f"<Account(player_id={self.player_id}, funcom_id={self.funcom_id})>"
 
 class ActorPosition(GameBase):
     __tablename__ = 'actor_position'
@@ -306,22 +542,32 @@ class Characters(GameBase, Owner):
     __bind_key__ = 'gamedb'
 
     id = Column(Integer, primary_key=True, nullable=False)
-    SteamID64 = Column('playerId', Text, nullable=False)
+    player_id = Column('playerId', Text, nullable=False)
     guild_id = Column('guild', Integer, ForeignKey('guilds.guildId'))
     name = Column('char_name', Text, nullable=False)
     _last_login = Column('lastTimeOnline', Integer)
     # relationship
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
+    _account = relationship("Account", uselist=False, back_populates="_character")
 
     @property
     def player(self):
-        if len(self.SteamID64) == 18:
-            return Player(SteamID64=self.SteamID64[:17])
-        return Player(SteamID64=self.SteamID64)
+        return Player(id=self.player_id)
+
+    @property
+    def pure_player_id(self):
+        return self.player_id if len(self.player_id) <= 2 or self.player_id[-2] != '#' else self.player_id[:-2]
+
+    @property
+    def account(self):
+        if self.slot == 'active':
+            return self._account
+        else:
+            return session.query(Account).filter_by(player_id=self.pure_player_id).one()
 
     @property
     def slot(self):
-        return 'active' if len(self.SteamID64) == 17 else self.SteamID64[17]
+        return 'active' if len(self.player_id) <= 2 or self.player_id[-2] != '#' else self.player_id[-1]
 
     @property
     def last_login(self):
@@ -420,16 +666,39 @@ class ServerPopulationRecordings(GameBase):
     def __repr__(self):
         return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
 
+class Steam64(GameBase):
+    __tablename__ = 'steam64'
+    __bind_key__ = 'gamedb'
+
+    id = Column(Text, primary_key=True, nullable=False)
+    funcom_id = Column('user_id', Text, nullable=False)
+    # relationship
+    account = relationship('Account', backref="steam64", uselist=False)
+
+    def __repr__(self):
+        return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
+
 class Users(UsersBase):
     __tablename__ = 'users'
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    SteamID64 = Column(String(17), unique=True, nullable=False)
+    steam_id = Column('SteamID64', String(17), unique=True, nullable=False)
     disc_user = Column(String, unique=True, nullable=False)
+    funcom_id = Column(String(16), unique=True)
+    player_id = Column(String, unique=True)
 
     def __repr__(self):
-        return f"<Users(SteamID64='{self.SteamID64}', disc_user='{self.disc_user}')>"
+        return f"<Users(steam_id='{str(self.steam_id)}', disc_user='{str(self.disc_user)}', funcom_id='{str(self.funcom_id)}', player_id='{str(self.player_id)}')>"
+
+    @property
+    def characters(self):
+        if self.funcom_id or self.player_id:
+            return Player(id=self.player_id, funcom_id=self.funcom_id).characters
+        # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
+        account = session.query(Account).filter_by(funcom_id=self.steam_id).first()
+        if account:
+            return account.characters
 
 class OwnersCache(UsersBase, Owner):
     __tablename__ = 'owners_cache'
@@ -495,7 +764,7 @@ class ObjectsCache(UsersBase):
         cache = {obj.id: obj.owner_unknown_since for obj in session.query(ObjectsCache).all()}
         for id, dt in cache.items():
             if not id in objects:
-                del_obj = session.query.get(id)
+                del_obj = session.query(ObjectsCache).get(id)
                 session.delete(del_obj)
         now = int(datetime.utcnow().timestamp())
         for id in objects:
@@ -518,4 +787,45 @@ class ObjectsCache(UsersBase):
     def __repr__(self):
         return f"<ObjectsCache(id='{self.id}', owner_unknown_since='{self.owner_unknown_since}')>"
 
+class Applications(UsersBase):
+    __tablename__ = 'applications'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    applicant = Column(String, unique=True, nullable=False)
+    status = Column(String, nullable=False)
+    steam_id_row = Column(Integer)
+    current_question = Column(Integer)
+    open_date = Column(DateTime)
+
+    def __repr__(self):
+        return f"<Applications(id='{self.id}', applicant='{self.applicant}', status='{self.status}')>"
+
+class Questions(UsersBase):
+    __tablename__ = 'questions'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey(Applications.id, ondelete='CASCADE'))
+    qnum = Column(Integer, nullable=False)
+    question = Column(String)
+    answer = Column(String)
+    # relationships
+    application = relationship('Applications', backref=backref("questions", cascade="all, delete"))
+
+    def __repr__(self):
+        return f"<Qustions(id='{self.id}', qnum='{self.qnum}')>"
+
+class BaseQuestions(UsersBase):
+    __tablename__ = 'base_questions'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    txt = Column(String)
+    has_steam_id = Column('has_steamID', Boolean, default=False)
+
+    def __repr__(self):
+        return f"<BaseQuestions(id='{self.id}')>"
+
+GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
