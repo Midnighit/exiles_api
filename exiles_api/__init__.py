@@ -425,17 +425,38 @@ class TilesManager:
         return self.tiles
 
 class MembersManager:
-    def __init__(self):
-        self.members = {}
+    def _get_guilds_query(self, threshold):
+        subquery = session.query(Buildings.owner_id).subquery()
+        return session.query(Characters.guild_id, Guilds.name, func.count(Characters.guild_id), Characters._last_login) \
+                      .filter(Characters.guild_id!=None,
+                              Characters._last_login>=threshold,
+                              Guilds.id==Characters.guild_id,
+                              Characters.guild_id.in_(subquery)) \
+                      .group_by(Characters.guild_id)
+
+    def _get_chars_query(self):
+        subquery = session.query(Buildings.owner_id).subquery()
+        return session.query(Characters.id, Characters.name, Characters._last_login) \
+                      .filter(Characters.guild_id==None, Characters.id.in_(subquery))
 
     def get_members(self, td=None):
-        threshold = int((datetime.utcnow() - td).timestamp()) if td else 0
-        subquery = session.query(Buildings.owner_id).subquery()
-        return {c[0]: c[1] for c in session.query(Characters.guild_id, func.count(Characters.guild_id)) \
-                                           .filter(Characters.guild_id!=None,
-                                                   Characters._last_login>threshold,
-                                                   Characters.guild_id.in_(subquery)) \
-                                           .group_by(Characters.guild_id).all()}
+        self.members = {}
+        threshold = int((datetime.utcnow() - td).timestamp()) if td is not None else 0
+        owners = set()
+        for g in self._get_guilds_query(0).all():
+            owners.add(g[0])
+            self.members[g[0]] = {'name': g[1], 'numMembers': g[2], 'numActiveMembers': g[2]}
+        for c in self._get_chars_query().all():
+            numActiveMembers = 1 if c[2] >= threshold else 0
+            self.members[c[0]] = {'name': c[1], 'numMembers': 1, 'numActiveMembers': numActiveMembers}
+        if td is None:
+            return self.members
+        for g in self._get_guilds_query(threshold):
+            owners.remove(g[0])
+            self.members[g[0]]['numActiveMembers'] = g[2]
+        for g in owners:
+            self.members[g]['numActiveMembers'] = 0
+        return self.members
 
 # db-classes
 class Account(GameBase):
