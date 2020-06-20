@@ -391,35 +391,51 @@ class CharList(tuple):
 class TilesManager:
     def __init__(self):
         # stores all tiles indexed by their respective owners
-        tiles = {}
+        self.tiles = {}
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
-        root = set()
+        self.root = set()
 
-    def get_tiles_by_owner(self, bMult=1, pMult=1):
+    def get_tiles_by_owner(self, bMult=1, pMult=1, do_round=True):
         # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated objects
         for res in session.query(Buildings.object_id, Buildings.owner_id, func.count(Buildings.object_id)) \
                           .filter(Buildings.object_id==BuildingInstances.object_id) \
                           .group_by(Buildings.object_id).all():
             # create a new dict entry if owner does not have one yet
-            if not res[1] in tiles:
-                tiles[res[1]] = res[2] * bMult
+            if not res[1] in self.tiles:
+                self.tiles[res[1]] = res[2] * bMult
             # add aggregated tiles if one already exists
             else:
-                tiles[res[1]] += res[2] * bMult
+                self.tiles[res[1]] += res[2] * bMult
             # remember the object_id as root object in either case
-            root.add(res[0])
+            self.root.add(res[0])
 
         # res has format: (object_id, owner_id) contains all building tiles and placeables
         for res in session.query(Buildings.object_id, Buildings.owner_id).filter(Buildings.object_id==ActorPosition.id).all():
             # if object is not a root object, it is a placeable and needs to be added now
-            if not res[0] in root:
+            if not res[0] in self.root:
                 # if owner is not in tiles (i.e. owner has no building tiles) create a new dict entry
-                if not res[1] in tiles:
-                    tiles[res[1]] = pMult
+                if not res[1] in self.tiles:
+                    self.tiles[res[1]] = pMult
                 # otherwise add it to the count
                 else:
-                    tiles[res[1]] += pMult
-        return tiles
+                    self.tiles[res[1]] += pMult
+        if do_round:
+            for owner_id, value in self.tiles.items():
+                self.tiles[owner_id] = int(round(value, 0))
+        return self.tiles
+
+class MembersManager:
+    def __init__(self):
+        self.members = {}
+
+    def get_members(self, td=None):
+        threshold = int((datetime.utcnow() - td).timestamp()) if td else 0
+        subquery = session.query(Buildings.owner_id).subquery()
+        return {c[0]: c[1] for c in session.query(Characters.guild_id, func.count(Characters.guild_id)) \
+                                           .filter(Characters.guild_id!=None,
+                                                   Characters._last_login>threshold,
+                                                   Characters.guild_id.in_(subquery)) \
+                                           .group_by(Characters.guild_id).all()}
 
 # db-classes
 class Account(GameBase):
