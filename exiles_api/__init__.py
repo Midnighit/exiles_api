@@ -251,7 +251,11 @@ class Player:
             self.id = self.id or self.real_id
 
     def __repr__(self):
-        return f"<Player(player_id={str(self.id)}, funcom_id={str(self.funcom_id)}, steam_id={str(self.steam_id)}, disc_user={str(self.disc_user)})>"
+        id = f"'{str(self.id)}'" if self.id else "None"
+        funcom_id = f"'{str(self.funcom_id)}'" if self.funcom_id else "None"
+        steam_id = f"'{str(self.steam_id)}'" if self.steam_id else "None"
+        disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
+        return f"<Player(id={id}, funcom_id={funcom_id}, steam_id={steam_id}, disc_user={disc_user})>"
 
     @property
     def id(self):
@@ -360,7 +364,7 @@ class Tiles:
         return None
 
     def __repr__(self):
-        return f"<Tiles(owner_id={self.owner_id}, object_id={self.object_id}, amount={self.amount}, type={self.type})>"
+        return f"<Tiles(owner_id={self.owner_id}, object_id={self.object_id}, amount={self.amount}, type='{self.type}')>"
 
 class BuildingTiles(Tiles):
     def __init__(self, **kwargs):
@@ -487,7 +491,7 @@ class Account(GameBase):
         return Player(id=self.player_id, funcom_id=self.funcom_id)
 
     def __repr__(self):
-        return f"<Account(player_id={self.player_id}, funcom_id={self.funcom_id})>"
+        return f"<Account(player_id='{self.player_id}', funcom_id='{self.funcom_id}')>"
 
 class ActorPosition(GameBase):
     __tablename__ = 'actor_position'
@@ -510,7 +514,7 @@ class BuildableHealth(GameBase):
     template_id = Column(Integer, primary_key=True)
 
     def __repr__(self):
-        return f"<BuildableHealth(object_id={self.object_id}, instance_id='{self.instance_id}', template_id='{self.template_id}')>"
+        return f"<BuildableHealth(object_id={self.object_id}, instance_id={self.instance_id}, template_id={self.template_id})>"
 
 class BuildingInstances(GameBase):
     __tablename__ = 'building_instances'
@@ -522,7 +526,7 @@ class BuildingInstances(GameBase):
     class_ = Column('class', Text)
 
     def __repr__(self):
-        return f"<BuildingInstances(object_id={self.object_id}, instance_id='{self.instance_id}', class='{self.class_}')>"
+        return f"<BuildingInstances(object_id={self.object_id}, instance_id={self.instance_id}, class='{self.class_}')>"
 
 class Buildings(GameBase):
     __tablename__ = 'buildings'
@@ -532,7 +536,7 @@ class Buildings(GameBase):
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
 
     def __repr__(self):
-        return f"<Buildings(object_id={self.object_id}, owner_id='{self.owner_id}')>"
+        return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
 
 class CharacterStats(GameBase):
     __tablename__ = 'character_stats'
@@ -543,7 +547,7 @@ class CharacterStats(GameBase):
     stat_id = Column(Integer, primary_key=True)
 
     def __repr__(self):
-        return f"<CharacterStats(char_id={self.char_id}, stat_id='{self.stat_id}')>"
+        return f"<CharacterStats(char_id={self.char_id}, stat_id={self.stat_id})>"
 
 class Guilds(GameBase, Owner):
     __tablename__ = 'guilds'
@@ -635,7 +639,7 @@ class FollowerMarkers(GameBase):
     follower_id = Column(Integer, primary_key=True)
 
     def __repr__(self):
-        return f"<FollowerMarkers(owner_id={self.owner_id}, follower_id={self.follower_id}')>"
+        return f"<FollowerMarkers(owner_id={self.owner_id}, follower_id={self.follower_id})>"
 
 class GameEvents(GameBase):
     __tablename__ = 'game_events'
@@ -647,7 +651,7 @@ class GameEvents(GameBase):
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
 
     def __repr__(self):
-        return f"<GameEvents(world_time={self.world_time}, event_type='{self.event_type}', object_id='{self.object_id}')>"
+        return f"<GameEvents(world_time={self.world_time}, event_type={self.event_type}, object_id={self.object_id})>"
 
 class ItemInventory(GameBase):
     __tablename__ = 'item_inventory'
@@ -658,7 +662,7 @@ class ItemInventory(GameBase):
     owner_id = Column(Integer, primary_key=True, nullable=False)
 
     def __repr__(self):
-        return f"<ItemInventory(item_id={self.item_id}, owner_id='{self.owner_id}')>"
+        return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id})>"
 
 class ItemProperties(GameBase):
     __tablename__ = 'item_properties'
@@ -670,7 +674,7 @@ class ItemProperties(GameBase):
     inv_type = Column(Integer, primary_key=True, nullable=False)
 
     def __repr__(self):
-        return f"<ItemInventory(item_id={self.item_id}, owner_id='{self.owner_id}', inv_type='{self.inv_type}')>"
+        return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id}, inv_type={self.inv_type})>"
 
 class Properties(GameBase):
     __tablename__ = 'properties'
@@ -713,7 +717,7 @@ class Steam64(GameBase):
     account = relationship('Account', backref="steam64", uselist=False)
 
     def __repr__(self):
-        return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
+        return f"<Steam64(id='{self.id}', funcom_id='{self.funcom_id}')>"
 
 class Users(UsersBase):
     __tablename__ = 'users'
@@ -726,7 +730,11 @@ class Users(UsersBase):
     player_id = Column(String, unique=True)
 
     def __repr__(self):
-        return f"<Users(steam_id='{str(self.steam_id)}', disc_user='{str(self.disc_user)}', funcom_id='{str(self.funcom_id)}', player_id='{str(self.player_id)}')>"
+        steam_id = f"'{str(self.steam_id)}'" if self.steam_id else "None"
+        disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
+        funcom_id = f"'{str(self.funcom_id)}'" if self.funcom_id else "None"
+        player_id = f"'{str(self.player_id)}'" if self.player_id else "None"
+        return f"<Users(id={self.id}, steam_id={steam_id}, disc_user={disc_user}, funcom_id={funcom_id}, player_id={player_id})>"
 
     @property
     def characters(self):
@@ -771,7 +779,7 @@ class OwnersCache(UsersBase, Owner):
         session.commit()
 
     def __repr__(self):
-        return f"<OwnersCache(id='{self.id}', name='{self.name}')>"
+        return f"<OwnersCache(id={self.id}, name='{self.name}')>"
 
 class ObjectsCache(UsersBase):
     __tablename__ = 'objects_cache'
@@ -822,7 +830,7 @@ class ObjectsCache(UsersBase):
             self._timestamp = value
 
     def __repr__(self):
-        return f"<ObjectsCache(id='{self.id}', owner_unknown_since='{self.owner_unknown_since}')>"
+        return f"<ObjectsCache(id={self.id}, owner_unknown_since='{self.owner_unknown_since}')>"
 
 class Applications(UsersBase):
     __tablename__ = 'applications'
@@ -836,7 +844,7 @@ class Applications(UsersBase):
     open_date = Column(DateTime)
 
     def __repr__(self):
-        return f"<Applications(id='{self.id}', applicant='{self.applicant}', status='{self.status}')>"
+        return f"<Applications(id={self.id}, applicant='{self.applicant}', status='{self.status}')>"
 
 class Questions(UsersBase):
     __tablename__ = 'questions'
@@ -851,7 +859,7 @@ class Questions(UsersBase):
     application = relationship('Applications', backref=backref("questions", cascade="all, delete"))
 
     def __repr__(self):
-        return f"<Qustions(id='{self.id}', qnum='{self.qnum}')>"
+        return f"<Qustions(id={self.id}, qnum={self.qnum})>"
 
 class BaseQuestions(UsersBase):
     __tablename__ = 'base_questions'
@@ -862,7 +870,35 @@ class BaseQuestions(UsersBase):
     has_steam_id = Column('has_steamID', Boolean, default=False)
 
     def __repr__(self):
-        return f"<BaseQuestions(id='{self.id}')>"
+        return f"<BaseQuestions(id={self.id})>"
+
+class TextBlocks(UsersBase):
+    __tablename__ = 'text_blocks'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    content = Column(String)
+
+    @staticmethod
+    def get(name=None, id=None, obj=False):
+        if not name and not id:
+            return None
+        if not obj:
+            if id:
+                result = session.query(TextBlocks.content).filter_by(id=id).first()
+            else:
+                result = session.query(TextBlocks.content).filter_by(name=name).first()
+            if result:
+                return result[0]
+            return None
+        if id:
+            return session.query(TextBlocks).get(id)
+        else:
+            return session.query(TextBlocks).filter_by(name=name).first()
+
+    def __repr__(self):
+        return f"<TextBlocks(id={self.id}, name='{self.name}', content='{self.content}')>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
