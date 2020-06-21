@@ -53,7 +53,7 @@ class Player:
             self._get_disc_user_by_disc_short()
         # print(f"attributes after assigning kwargs: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
         found_attributes = num_attributes = self._get_num_attributes()
-        while(found_attributes > 0):
+        while(found_attributes > 0 and not self._has_all_attributes()):
             if not self.id:
                 if self.funcom_id:
                     self._get_player_id_by_funcom_id()
