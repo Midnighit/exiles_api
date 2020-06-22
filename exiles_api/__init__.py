@@ -726,15 +726,17 @@ class Users(UsersBase):
     id = Column(Integer, primary_key=True)
     steam_id = Column('SteamID64', String(17), unique=True, nullable=False)
     disc_user = Column(String, unique=True, nullable=False)
+    disc_id = Column(String(18), unique=True)
     funcom_id = Column(String(16), unique=True)
     player_id = Column(String, unique=True)
 
     def __repr__(self):
         steam_id = f"'{str(self.steam_id)}'" if self.steam_id else "None"
         disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
+        disc_id = f"'{str(self.disc_id)}'" if self.disc_id else "None"
         funcom_id = f"'{str(self.funcom_id)}'" if self.funcom_id else "None"
         player_id = f"'{str(self.player_id)}'" if self.player_id else "None"
-        return f"<Users(id={self.id}, steam_id={steam_id}, disc_user={disc_user}, funcom_id={funcom_id}, player_id={player_id})>"
+        return f"<Users(id={self.id}, steam_id={steam_id}, disc_user={disc_user}, disc_id={disc_id}, funcom_id={funcom_id}, player_id={player_id})>"
 
     @property
     def characters(self):
