@@ -40,82 +40,53 @@ def db_date():
 # non-db classes
 class Player:
     def __init__(self, **kwargs):
-        self.id = kwargs.get("id")
-        if self.id:
-            self.id = str(self.id)
-            self.real_id = self.id if len(self.id) <= 2 or self.id[-2] != '#' else self.id[:-2]
-        else:
-            self.real_id = None
-        self.funcom_id = kwargs.get("funcom_id")
+        self._properties = {}
+        property_names = ('player_id', 'steam_id', 'disc_user', 'disc_id', 'funcom_id', 'real_id')
+        self.player_id = kwargs.get("id") or kwargs.get("player_id")
         self.steam_id = kwargs.get("steam_id")
         self.disc_user = kwargs.get("disc_user")
-        if self.disc_user and (len(self.disc_user) <= 5 or self.disc_user[-5] != '#'):
-            self._get_disc_user_by_disc_short()
-        # print(f"attributes after assigning kwargs: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+        self.disc_id = kwargs.get("disc_id")
+        self.funcom_id = kwargs.get("funcom_id")
+        # print("\nproperties:", self._properties)
+
+        functions = {
+            # get player_id functions
+            'get_player_id_by_steam_id': self._get_player_id_by_steam_id,
+            'get_player_id_by_disc_user': self._get_player_id_by_disc_user,
+            'get_player_id_by_disc_id': self._get_player_id_by_disc_id,
+            'get_player_id_by_funcom_id': self._get_player_id_by_funcom_id,
+            # get steam_id functions
+            'get_steam_id_by_player_id': self._get_steam_id_by_player_id,
+            'get_steam_id_by_disc_user': self._get_steam_id_by_disc_user,
+            'get_steam_id_by_disc_id': self._get_steam_id_by_disc_id,
+            'get_steam_id_by_funcom_id': self._get_steam_id_by_funcom_id,
+            # get disc_user functions
+            'get_disc_user_by_player_id': self._get_disc_user_by_player_id,
+            'get_disc_user_by_steam_id': self._get_disc_user_by_steam_id,
+            'get_disc_user_by_disc_id': self._get_disc_user_by_disc_id,
+            'get_disc_user_by_funcom_id': self._get_disc_user_by_funcom_id,
+            # get disc_id functions
+            'get_disc_id_by_player_id': self._get_disc_id_by_player_id,
+            'get_disc_id_by_steam_id': self._get_disc_id_by_steam_id,
+            'get_disc_id_by_disc_user': self._get_disc_id_by_disc_user,
+            'get_disc_id_by_funcom_id': self._get_disc_id_by_funcom_id,
+            # get funcom_id functions
+            'get_funcom_id_by_player_id': self._get_funcom_id_by_player_id,
+            'get_funcom_id_by_steam_id': self._get_funcom_id_by_steam_id,
+            'get_funcom_id_by_disc_user': self._get_funcom_id_by_disc_user,
+            'get_funcom_id_by_disc_id': self._get_funcom_id_by_disc_id
+        }
+
         found_attributes = num_attributes = self._get_num_attributes()
+        # print("found_attributes:", found_attributes, "num_attributes:", num_attributes)
         while(found_attributes > 0 and not self._has_all_attributes()):
-            if not self.id:
-                if self.funcom_id:
-                    self._get_player_id_by_funcom_id()
-                    # print(f"attributes after fcid =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.id and self.steam_id:
-                    self._get_player_id_by_steam_id()
-                    # print(f"attributes after stid =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.id and self.disc_user:
-                    self._get_player_id_by_disc_user()
-                    # print(f"attributes after   du =>   id: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-            if not self.funcom_id:
-                if self.id:
-                    self._get_funcom_id_by_player_id()
-                    # print(f"attributes after   id => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.funcom_id and self.steam_id:
-                    self._get_funcom_id_by_steam_id()
-                    # print(f"attributes after stid => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.funcom_id and self.disc_user:
-                    self._get_funcom_id_by_disc_user()
-                    # print(f"attributes after   du => fcid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-            if not self.steam_id:
-                if self.id:
-                    self._get_steam_id_by_player_id()
-                    # print(f"attributes after   id => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.steam_id and self.funcom_id:
-                    self._get_steam_id_by_funcom_id()
-                    # print(f"attributes after fcid => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.steam_id and self.disc_user:
-                    self._get_steam_id_by_disc_user()
-                    # print(f"attributes after   du => stid: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-            if not self.disc_user:
-                if self.id:
-                    self._get_disc_user_by_player_id()
-                    # print(f"attributes after   id =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.disc_user and self.funcom_id:
-                    self._get_disc_user_by_funcom_id()
-                    # print(f"attributes after fcid =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
-                    if self._has_all_attributes():
-                        break
-                if not self.disc_user and self.steam_id:
-                    self._get_disc_user_by_steam_id()
-                    # print(f"attributes after stid =>   du: id == {self.id}, real_id == {self.real_id}, funcom_id == {self.funcom_id}, steam_id == {self.steam_id}, disc_user == {self.disc_user}")
+            for f_name, function in functions.items():
+                parts = f_name.split('_')
+                seek = parts[1] + '_' + parts[2]
+                have = parts[4] + '_' + parts[5]
+                if not self._properties[seek] and self._properties[have]:
+                    function()
+                    # print("seek:", seek, "have:", have, "properties:", self._properties)
                     if self._has_all_attributes():
                         break
             new_num_attributes = self._get_num_attributes()
@@ -130,14 +101,15 @@ class Player:
             self.characters = []
 
     def _has_all_attributes(self):
-        return self.id is not None and \
+        return self.player_id is not None and \
                self.funcom_id is not None and \
                self.steam_id is not None and \
-               self.disc_user is not None
+               self.disc_user is not None and \
+               self.disc_id is not None
 
     def _get_num_attributes(self):
         num = 0
-        if self.id:
+        if self.player_id:
             num += 1
         if self.funcom_id:
             num += 1
@@ -145,43 +117,60 @@ class Player:
             num += 1
         if self.disc_user:
             num += 1
+        if self.disc_id:
+            num += 1
         return num
 
-    def _get_disc_user_by_disc_short(self):
-        result = session.query(Users.disc_user).filter(Users.disc_user.like((self.disc_user + '#____'))).first()
+    def _get_full_disc_user(self, value):
+        result = session.query(Users.disc_user).filter(Users.disc_user.like((value + '#____'))).first()
         if result:
-            self.disc_user = result[0]
-            return
-        result = session.query(Users.disc_user).filter(Users.disc_user.like(('%' + self.disc_user + '%#____'))).first()
+            return result[0]
+        result = session.query(Users.disc_user).filter(Users.disc_user.like(('%' + value + '%#____'))).first()
         if result:
-            self.disc_user = result[0]
+            return result[0]
+        return None
 
     def _get_player_id_by_funcom_id(self):
         result = session.query(Account.player_id).filter_by(funcom_id=self.funcom_id).first()
         if result:
-            self.real_id = self.id = str(result[0])
+            self.real_id = self.player_id = str(result[0])
 
     def _get_player_id_by_steam_id(self):
         self._get_funcom_id_by_steam_id()
-        if self.funcom_id and not self.id:
+        if self.funcom_id and not self.player_id:
             self._get_player_id_by_funcom_id()
         # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
         result = session.query(Account.player_id).filter_by(funcom_id=self.steam_id).first()
         if result:
-            self.real_id = self.id = str(result[0])
+            self.real_id = self.player_id = str(result[0])
 
     def _get_player_id_by_disc_user(self):
         user = session.query(Users).filter_by(disc_user=self.disc_user).first()
         if user:
             self.steam_id = user.steam_id or self.steam_id
             self.funcom_id = user.funcom_id or self.funcom_id
+            self.disc_id = user.disc_id or self.disc_id
             if user.player_id:
-                self.real_id = self.id = str(user.player_id)
+                self.real_id = self.player_id = str(user.player_id)
             # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
-            if not self.id:
+            if not self.player_id:
                 result = session.query(Account.player_id).filter_by(funcom_id=self.steam_id).first()
                 if result:
-                    self.real_id = self.id = str(result[0])
+                    self.real_id = self.player_id = str(result[0])
+
+    def _get_player_id_by_disc_id(self):
+        user = session.query(Users).filter_by(disc_id=self.disc_id).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.funcom_id = user.funcom_id or self.funcom_id
+            self.disc_user = user.disc_user or self.disc_user
+            if user.player_id:
+                self.real_id = self.player_id = str(user.player_id)
+            # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
+            if not self.player_id:
+                result = session.query(Account.player_id).filter_by(funcom_id=self.steam_id).first()
+                if result:
+                    self.real_id = self.player_id = str(result[0])
 
     def _get_funcom_id_by_player_id(self):
         result = session.query(Account.funcom_id).filter_by(player_id=self.real_id).first()
@@ -198,12 +187,16 @@ class Player:
             user = session.query(Users).filter_by(steam_id=self.steam_id).first()
             if user:
                 self.disc_user = user.disc_user or self.disc_user
+                self.disc_id = user.disc_id or self.disc_id
                 self.funcom_id = user.funcom_id
                 if user.player_id:
                     self.real_id = str(user.player_id)
-                self.id = self.id or self.real_id
+                self.player_id = self.player_id or self.real_id
 
     def _get_funcom_id_by_disc_user(self):
+        self._get_player_id_by_disc_user()
+
+    def _get_funcom_id_by_disc_id(self):
         self._get_player_id_by_disc_user()
 
     def _get_steam_id_by_player_id(self):
@@ -219,12 +212,18 @@ class Player:
             if user:
                 self.steam_id = user.steam_id
                 self.disc_user = user.disc_user or self.disc_user
+                self.disc_id = user.disc_id or self.disc_id
                 if user.player_id:
                     self.real_id = str(user.player_id)
-                self.id = self.id or self.real_id
+                self.player_id = self.player_id or self.real_id
 
     def _get_steam_id_by_disc_user(self):
         result = session.query(Users.steam_id).filter_by(disc_user=self.disc_user).first()
+        if result:
+            self.steam_id = result[0]
+
+    def _get_steam_id_by_disc_id(self):
+        result = session.query(Users.steam_id).filter_by(disc_id=self.disc_id).first()
         if result:
             self.steam_id = result[0]
 
@@ -237,72 +236,162 @@ class Player:
         if user:
             self.steam_id = user.steam_id or self.steam_id
             self.disc_user = user.disc_user
+            self.disc_id = user.disc_id or self.disc_id
             if user.player_id:
                 self.real_id = str(user.player_id)
-            self.id = self.id or self.real_id
+            self.player_id = self.player_id or self.real_id
 
     def _get_disc_user_by_steam_id(self):
         user = session.query(Users).filter_by(steam_id=self.steam_id).first()
         if user:
-            self.steam_id = user.steam_id or self.steam_id
+            self.funcom_id = user.funcom_id or self.funcom_id
             self.disc_user = user.disc_user
+            self.disc_id = user.disc_id or self.disc_id
             if user.player_id:
                 self.real_id = str(user.player_id)
-            self.id = self.id or self.real_id
+            self.player_id = self.player_id or self.real_id
+
+    def _get_disc_user_by_disc_id(self):
+        user = session.query(Users).filter_by(disc_id=self.disc_id).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.disc_user = user.disc_user
+            self.funcom_id = user.funcom_id or self.funcom_id
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.player_id = self.player_id or self.real_id
+
+    def _get_disc_id_by_player_id(self):
+        self._get_funcom_id_by_player_id()
+        self._get_disc_id_by_funcom_id()
+
+    def _get_disc_id_by_funcom_id(self):
+        user = session.query(Users).filter_by(funcom_id=self.funcom_id).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.disc_user = user.disc_user or self.disc_user
+            self.disc_id = user.disc_id
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.player_id = self.player_id or self.real_id
+
+    def _get_disc_id_by_steam_id(self):
+        user = session.query(Users).filter_by(steam_id=self.steam_id).first()
+        if user:
+            self.funcom_id = user.funcom_id or self.funcom_id
+            self.disc_user = user.disc_user or self.disc_user
+            self.disc_id = user.disc_id
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.player_id = self.player_id or self.real_id
+
+    def _get_disc_id_by_disc_user(self):
+        user = session.query(Users).filter_by(disc_user=self.disc_user).first()
+        if user:
+            self.steam_id = user.steam_id or self.steam_id
+            self.funcom_id = user.funcom_id or self.funcom_id
+            self.disc_id = user.disc_id
+            if user.player_id:
+                self.real_id = str(user.player_id)
+            self.player_id = self.player_id or self.real_id
 
     def __repr__(self):
-        id = f"'{str(self.id)}'" if self.id else "None"
+        id = f"'{str(self.player_id)}'" if self.player_id else "None"
         funcom_id = f"'{str(self.funcom_id)}'" if self.funcom_id else "None"
         steam_id = f"'{str(self.steam_id)}'" if self.steam_id else "None"
         disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
         return f"<Player(id={id}, funcom_id={funcom_id}, steam_id={steam_id}, disc_user={disc_user})>"
 
     @property
+    def player_id(self):
+        return self._properties['player_id']
+
+    @player_id.setter
+    def player_id(self, value):
+        if value is None:
+            self._properties['player_id'] = self._properties['real_id'] = None
+            return
+        value = str(value)
+        self._properties['player_id'] = value
+        self._properties['real_id'] = value[:-2] if len(value) > 2 and value[-2] == '#' else value
+
+    # id is an alias for player_id within the Player class
+    @property
     def id(self):
-        return self._id
+        return self._properties['player_id']
 
     @id.setter
     def id(self, value):
-        self._id = value
+        if value is None:
+            self._properties['player_id'] = self._properties['real_id'] = None
+            return
+        value = str(value)
+        self._properties['player_id'] = value
+        self._properties['real_id'] = value[:-2] if len(value) > 2 and value[-2] == '#' else value
+
+    @property
+    def real_id(self):
+        return self._properties['real_id']
+
+    @real_id.setter
+    def real_id(self, value):
+        if value is None:
+            self._properties['real_id'] = None
+            return
+        value = str(value)
+        self._properties['real_id'] = value[:-2] if len(value) > 2 and value[-2] == '#' else value
 
     @property
     def funcom_id(self):
-        return self._funcom_id
+        return self._properties['funcom_id']
 
     @funcom_id.setter
     def funcom_id(self, value):
-        self._funcom_id = value
+        if value is None:
+            self._properties['funcom_id'] = None
+            return
+        value = str(value)
+        self._properties['funcom_id'] = value if len(value) == 16 else None
 
     @property
     def steam_id(self):
-        return self._steam_id
+        return self._properties['steam_id']
 
     @steam_id.setter
     def steam_id(self, value):
         if value is None:
-            self._steam_id = None
+            self._properties['steam_id'] = None
             return
-        if not value is str:
-            try:
-                value = str(value)
-            except:
-                raise ValueError("steam_id must be a string.")
-        if not value:
-            raise ValueError("Missing argument steam_id")
+        value = str(value)
         if not value.isnumeric():
-            raise ValueError("steam_id may only contain numeric characterrs.")
-        if not len(value) == 17:
-            raise ValueError("steam_id must have 17 digits.")
-        self._steam_id = value
-        return
+            self._properties['steam_id'] = None
+            return
+        self._properties['steam_id'] = value if len(value) == 17 else None
 
     @property
     def disc_user(self):
-        return self._disc_user
+        return self._properties['disc_user']
 
     @disc_user.setter
     def disc_user(self, value):
-        self._disc_user = value
+        if value is None:
+            self._properties['disc_user'] = None
+        value = str(value)
+        if value and (len(value) <= 5 or value[-5] != '#'):
+            self._properties['disc_user'] = self._get_full_disc_user(value)
+        else:
+            self._properties['disc_user'] = value
+
+    @property
+    def disc_id(self):
+        return self._properties['disc_id']
+
+    @disc_id.setter
+    def disc_id(self, value):
+        if value is None:
+            self._properties['disc_id'] = None
+        value = str(value)
+        self._properties['disc_id'] = value if len(value) == 18 and value.isnumeric() else None
 
     @property
     def characters(self):
@@ -596,6 +685,10 @@ class Characters(GameBase, Owner):
         return Player(id=self.player_id)
 
     @property
+    def user(self):
+        return session.query(Users).filter_by(player_id=self.pure_player_id).first()
+
+    @property
     def pure_player_id(self):
         return self.player_id if len(self.player_id) <= 2 or self.player_id[-2] != '#' else self.player_id[:-2]
 
@@ -608,6 +701,8 @@ class Characters(GameBase, Owner):
 
     @property
     def slot(self):
+        if self.player_id is None:
+            return 'undetermined'
         return 'active' if len(self.player_id) <= 2 or self.player_id[-2] != '#' else self.player_id[-1]
 
     @property
@@ -740,12 +835,29 @@ class Users(UsersBase):
 
     @property
     def characters(self):
-        if self.funcom_id or self.player_id:
-            return Player(id=self.player_id, funcom_id=self.funcom_id).characters
-        # characters that have not logged in since the patch still have their steam_id in place of the funcom_id
-        account = session.query(Account).filter_by(funcom_id=self.steam_id).first()
-        if account:
-            return account.characters
+        if not self.player_id and self.funcom_id:
+            result = session.query(Account.player_id).filter_by(funcom_id=self.funcom_id).first()
+            self.player_id = result[0] if result else None
+        self.characters = CharList()
+        if self.player_id:
+            self.characters = tuple(c for c in session.query(Characters)
+                                                      .filter(Characters.player_id.like(self.player_id + '#_') |
+                                                             (Characters.player_id==self.player_id)).all())
+        return self.characters
+
+    @staticmethod
+    def get_disc_users(value):
+        if len(value) > 5 and value[-5] == '#':
+            result = session.query(Users.disc_user).filter(Users.disc_user.collate('NOCASE')==value).first()
+            if result:
+                return result[0]
+        result = session.query(Users.disc_user).filter(Users.disc_user.like((value + '#____'))).first()
+        if result:
+            return result[0]
+        results = tuple(u[0] for u in session.query(Users.disc_user).filter(Users.disc_user.like(('%' + value + '%#____'))).all())
+        if results:
+            return results[0] if len(results) == 1 else results
+        return None
 
 class OwnersCache(UsersBase, Owner):
     __tablename__ = 'owners_cache'
