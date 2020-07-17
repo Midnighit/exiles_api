@@ -461,6 +461,12 @@ class Users(UsersBase):
     funcom_id = Column(String(16), unique=True)
     player_id = Column(String, unique=True)
 
+    def __init__(*args, **kwargs):
+        if 'funcom_id' in kwargs:
+            result = session.query(Account.player_id).filter_by(funcom_id=kwargs['funcom_id']).first()
+            kwargs['player_id'] = result[0] if result else None
+        super().__init__(*args, **kwargs)
+
     def __repr__(self):
         disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
         disc_id = f"'{str(self.disc_id)}'" if self.disc_id else "None"
