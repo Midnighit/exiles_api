@@ -317,6 +317,15 @@ class Characters(GameBase, Owner):
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
     _account = relationship("Account", uselist=False, back_populates="_character")
 
+    @staticmethod
+    def get_users(value):
+        results = session.query(Character).filter(Character.name.like('%' + str(value) + '%')).all()
+        users = []
+        for char in results:
+            user = session.query(Users).filter_by(player_id=char.player_id).first()
+            users += [user] if user and not user in users else []
+        return users if len(users) > 1 else users[0]
+
     @property
     def player(self):
         return Player(id=self.player_id)
@@ -461,10 +470,9 @@ class Users(UsersBase):
     funcom_id = Column(String(16), unique=True)
     player_id = Column(String, unique=True)
 
-    def __init__(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         if 'funcom_id' in kwargs:
-            result = session.query(Account.player_id).filter_by(funcom_id=kwargs['funcom_id']).first()
-            kwargs['player_id'] = result[0] if result else None
+            kwargs['player_id'] = self.get_player_id(kwargs['funcom_id'])
         super().__init__(*args, **kwargs)
 
     def __repr__(self):
@@ -477,14 +485,32 @@ class Users(UsersBase):
     @property
     def characters(self):
         if not self.player_id and self.funcom_id:
-            result = session.query(Account.player_id).filter_by(funcom_id=self.funcom_id).first()
-            self.player_id = result[0] if result else None
+            self.player_id = get_player_id(self.funcom_id)
         self.characters = CharList()
         if self.player_id:
             self.characters = tuple(c for c in session.query(Characters)
                                                       .filter(Characters.player_id.like(self.player_id + '#_') |
                                                              (Characters.player_id==self.player_id)).all())
         return self.characters
+
+    @staticmethod
+    def get_player_id(value):
+        result = session.query(Account.player_id).filter_by(funcom_id=value).first()
+        return result[0] if result else None
+
+    @staticmethod
+    def get_users(value):
+        if len(value) > 5 and value[-5] == '#':
+            result = session.query(Users).filter(Users.disc_user.collate('NOCASE')==value).first()
+            if result:
+                return result
+        result = session.query(Users).filter(Users.disc_user.like((value + '#____'))).first()
+        if result:
+            return result
+        results = tuple(u for u in session.query(Users).filter(Users.disc_user.like(('%' + value + '%#____'))).all())
+        if results:
+            return results[0] if len(results) == 1 else results
+        return None
 
     @staticmethod
     def get_disc_users(value):
