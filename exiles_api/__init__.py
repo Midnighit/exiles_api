@@ -486,12 +486,11 @@ class Users(UsersBase):
     def characters(self):
         if not self.player_id and self.funcom_id:
             self.player_id = get_player_id(self.funcom_id)
-        self.characters = CharList()
         if self.player_id:
-            self.characters = tuple(c for c in session.query(Characters)
-                                                      .filter(Characters.player_id.like(self.player_id + '#_') |
-                                                             (Characters.player_id==self.player_id)).all())
-        return self.characters
+            characters = CharList(c for c in session.query(Characters)
+                                                    .filter(Characters.player_id.like(self.player_id + '#_') |
+                                                           (Characters.player_id==self.player_id)).all())
+        return characters
 
     @staticmethod
     def get_player_id(value):
