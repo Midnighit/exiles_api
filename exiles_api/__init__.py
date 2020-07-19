@@ -319,7 +319,7 @@ class Characters(GameBase, Owner):
 
     @staticmethod
     def get_users(value):
-        results = session.query(Characters).filter(Character.name.like('%' + str(value) + '%')).all()
+        results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
         users = []
         for char in results:
             user = session.query(Users).filter_by(player_id=char.player_id).first()
