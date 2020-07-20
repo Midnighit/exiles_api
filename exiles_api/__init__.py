@@ -495,7 +495,7 @@ class Users(UsersBase):
             return [result]
         results = [u for u in session.query(Users).filter(Users.disc_user.like(('%' + value + '%#____'))).all()]
         if results:
-            return results
+            return results if results else []
         return None
 
     @staticmethod
