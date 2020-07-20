@@ -321,7 +321,7 @@ class Characters(GameBase, Owner):
         results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
         users = []
         for char in results:
-            user = session.query(Users).filter_by(player_id=char.player_id).first()
+            user = session.query(Users).filter_by(player_id=char.pure_player_id).first()
             users += [user] if user and not user in users else []
         return users
 
