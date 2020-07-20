@@ -487,8 +487,8 @@ class Users(UsersBase):
 
     @staticmethod
     def get_users(value):
-        if len(value) == 18 and value.isnumeric():
-            result = session.query(Users).filter_by(disc_id==value).first()
+        if len(str(value)) == 18 and str(value).isnumeric():
+            result = session.query(Users).filter_by(disc_id=value).first()
             if result:
                 return [result]
             return []
