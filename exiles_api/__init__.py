@@ -476,7 +476,8 @@ class Users(UsersBase):
         if self.player_id:
             characters = CharList(c for c in session.query(Characters)
                                                     .filter(Characters.player_id.like(self.player_id + '#_') |
-                                                           (Characters.player_id==self.player_id)).all())
+                                                           (Characters.player_id==self.player_id))
+                                                    .order_by(Characters.player_id).all())
         return characters
 
     @staticmethod
