@@ -487,7 +487,12 @@ class Users(UsersBase):
 
     @staticmethod
     def get_users(value):
-        if len(value) > 5 and value[-5] == '#':
+        if len(value) == 18 and value.isnumeric():
+            result = session.query(Users).filter_by(disc_id==value).first()
+            if result:
+                return [result]
+            return []
+        elif len(value) > 5 and value[-5] == '#':
             result = session.query(Users).filter(Users.disc_user.collate('NOCASE')==value).first()
             if result:
                 return [result]
