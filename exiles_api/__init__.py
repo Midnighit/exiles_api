@@ -194,10 +194,9 @@ class Account(GameBase):
     __table_args__ = {'autoload': True}
     __bind_key__ = 'gamedb'
     player_id = Column('id', Text, ForeignKey('characters.playerId'), primary_key=True, nullable=False)
-    funcom_id = Column('user', Text, ForeignKey('steam64.id'), nullable=False)
+    funcom_id = Column('user', Text, nullable=False)
     # relationship
     _character = relationship('Characters', back_populates='_account')
-    # relationship('Characters', backref="account")
 
     @property
     def characters(self):
@@ -324,7 +323,7 @@ class Characters(GameBase, Owner):
         for char in results:
             user = session.query(Users).filter_by(player_id=char.player_id).first()
             users += [user] if user and not user in users else []
-        return users if len(users) > 1 else users[0]
+        return users
 
     @property
     def player(self):
@@ -448,18 +447,6 @@ class ServerPopulationRecordings(GameBase):
     def __repr__(self):
         return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
 
-class Steam64(GameBase):
-    __tablename__ = 'steam64'
-    __bind_key__ = 'gamedb'
-
-    id = Column(Text, primary_key=True, nullable=False)
-    funcom_id = Column('user_id', Text, nullable=False)
-    # relationship
-    account = relationship('Account', backref="steam64", uselist=False)
-
-    def __repr__(self):
-        return f"<Steam64(id='{self.id}', funcom_id='{self.funcom_id}')>"
-
 class Users(UsersBase):
     __tablename__ = 'users'
     __bind_key__ = 'usersdb'
@@ -502,13 +489,13 @@ class Users(UsersBase):
         if len(value) > 5 and value[-5] == '#':
             result = session.query(Users).filter(Users.disc_user.collate('NOCASE')==value).first()
             if result:
-                return result
+                return [result]
         result = session.query(Users).filter(Users.disc_user.like((value + '#____'))).first()
         if result:
-            return result
-        results = tuple(u for u in session.query(Users).filter(Users.disc_user.like(('%' + value + '%#____'))).all())
+            return [result]
+        results = [u for u in session.query(Users).filter(Users.disc_user.like(('%' + value + '%#____'))).all()]
         if results:
-            return results[0] if len(results) == 1 else results
+            return results
         return None
 
     @staticmethod
