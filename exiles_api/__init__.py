@@ -211,10 +211,6 @@ class Account(GameBase):
         query = session.query(Users).filter((Users.funcom_id==self.funcom_id) | (Users.player_id==self.player_id))
         return query.first()
 
-    @property
-    def player(self):
-        return Player(id=self.player_id, funcom_id=self.funcom_id)
-
     def __repr__(self):
         return f"<Account(player_id='{self.player_id}', funcom_id='{self.funcom_id}')>"
 
@@ -324,10 +320,6 @@ class Characters(GameBase, Owner):
             user = session.query(Users).filter_by(player_id=char.pure_player_id).first()
             users += [user] if user and not user in users else []
         return users
-
-    @property
-    def player(self):
-        return Player(id=self.player_id)
 
     @property
     def user(self):
@@ -609,15 +601,22 @@ class Applications(UsersBase):
     __tablename__ = 'applications'
     __bind_key__ = 'usersdb'
 
-    id = Column(Integer, primary_key=True, nullable=False)
-    applicant = Column(String, unique=True, nullable=False)
-    status = Column(String, nullable=False)
-    steam_id_row = Column(Integer)
-    current_question = Column(Integer)
-    open_date = Column(DateTime)
+    id               = Column(Integer, primary_key=True, nullable=False)
+    disc_id          = Column(String(18), unique=True, nullable=False)
+    status           = Column(String, nullable=False, default='open')
+    funcom_id_row    = Column(Integer, default=None)
+    current_question = Column(Integer, default=1)
+    open_date        = Column(DateTime, default=datetime.utcnow())
+
+    def __init__(self, applicant, *args, **kwargs):
+        for q in session.query(BaseQuestions).all():
+            if q.has_funcom_id:
+                self.funcom_id_row=q.id
+            session.add(Questions(qnum=q.id, question=q.txt, answer='', application=self))
+        super().__init__(*args, **kwargs)
 
     def __repr__(self):
-        return f"<Applications(id={self.id}, applicant='{self.applicant}', status='{self.status}')>"
+        return f"<Applications(id={self.id}, disc_id='{self.disc_id}', status='{self.status}')>"
 
 class Questions(UsersBase):
     __tablename__ = 'questions'
@@ -640,7 +639,7 @@ class BaseQuestions(UsersBase):
 
     id = Column(Integer, primary_key=True)
     txt = Column(String)
-    has_steam_id = Column('has_steamID', Boolean, default=False)
+    has_funcom_id = Column('has_funcomID', Boolean, default=False)
 
     def __repr__(self):
         return f"<BaseQuestions(id={self.id})>"
