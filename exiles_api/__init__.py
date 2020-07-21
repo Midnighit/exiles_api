@@ -616,6 +616,9 @@ class Applications(UsersBase):
             session.add(Questions(qnum=q.id, question=q.txt, answer='', application=self))
         super().__init__(*args, **kwargs)
 
+    def can_edit_questions(self):
+        return self.status in ('open', 'finished', 'review')
+    
     def __repr__(self):
         return f"<Applications(id={self.id}, disc_id='{self.disc_id}', status='{self.status}')>"
 
