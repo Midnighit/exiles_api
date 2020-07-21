@@ -608,7 +608,8 @@ class Applications(UsersBase):
     current_question = Column(Integer, default=1)
     open_date        = Column(DateTime, default=datetime.utcnow())
 
-    def __init__(self, applicant, *args, **kwargs):
+    def __init__(self, disc_id, *args, **kwargs):
+        kwargs['disc_id'] = disc_id
         for q in session.query(BaseQuestions).all():
             if q.has_funcom_id:
                 self.funcom_id_row=q.id
