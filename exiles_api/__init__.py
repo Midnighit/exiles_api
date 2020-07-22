@@ -618,6 +618,14 @@ class Applications(UsersBase):
 
     def can_edit_questions(self):
         return self.status in ('open', 'finished', 'review')
+
+    @property
+    def first_unanswered(self):
+        if self.questions:
+            for q in self.questions:
+                if q.answer == '':
+                    return q.qnum
+        return -1
     
     def __repr__(self):
         return f"<Applications(id={self.id}, disc_id='{self.disc_id}', status='{self.status}')>"
