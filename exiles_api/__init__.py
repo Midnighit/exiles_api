@@ -208,8 +208,7 @@ class Account(GameBase):
 
     @property
     def user(self):
-        query = session.query(Users).filter((Users.funcom_id==self.funcom_id) | (Users.player_id==self.player_id))
-        return query.first()
+        return session.query(Users).filter_by(funcom_id==self.funcom_id).first()
 
     def __repr__(self):
         return f"<Account(player_id='{self.player_id}', funcom_id='{self.funcom_id}')>"
@@ -317,7 +316,7 @@ class Characters(GameBase, Owner):
         results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
         users = []
         for char in results:
-            user = session.query(Users).filter_by(player_id=char.pure_player_id).first()
+            user = session.query(Users).filter_by(funcom_id=char.account.funcom_id).first()
             users += [user] if user and not user in users else []
         return users
 
@@ -447,29 +446,20 @@ class Users(UsersBase):
     disc_user = Column(String, unique=True, nullable=False)
     disc_id = Column(String(18), unique=True)
     funcom_id = Column(String(16), unique=True)
-    player_id = Column(String, unique=True)
-
-    def __init__(self, *args, **kwargs):
-        if 'funcom_id' in kwargs:
-            kwargs['player_id'] = self.get_player_id(kwargs['funcom_id'])
-        super().__init__(*args, **kwargs)
 
     def __repr__(self):
         disc_user = f"'{str(self.disc_user)}'" if self.disc_user else "None"
         disc_id = f"'{str(self.disc_id)}'" if self.disc_id else "None"
         funcom_id = f"'{str(self.funcom_id)}'" if self.funcom_id else "None"
-        player_id = f"'{str(self.player_id)}'" if self.player_id else "None"
-        return f"<Users(id={self.id}, disc_user={disc_user}, disc_id={disc_id}, funcom_id={funcom_id}, player_id={player_id})>"
+        return f"<Users(id={self.id}, disc_user={disc_user}, disc_id={disc_id}, funcom_id={funcom_id})>"
 
     @property
     def characters(self):
-        if not self.player_id and self.funcom_id:
-            self.player_id = get_player_id(self.funcom_id)
-        if self.player_id:
-            characters = CharList(c for c in session.query(Characters)
-                                                    .filter(Characters.player_id.like(self.player_id + '#_') |
-                                                           (Characters.player_id==self.player_id))
-                                                    .order_by(Characters.player_id).all())
+        player_id = self.get_player_id(self.funcom_id)
+        characters = CharList(c for c in session.query(Characters)
+                                                .filter(Characters.player_id.like(player_id + '#_') |
+                                                       (Characters.player_id==player_id))
+                                                .order_by(Characters.player_id).all())
         return characters
 
     @staticmethod
@@ -626,7 +616,7 @@ class Applications(UsersBase):
                 if q.answer == '':
                     return q.qnum
         return -1
-    
+
     def __repr__(self):
         return f"<Applications(id={self.id}, disc_id='{self.disc_id}', status='{self.status}')>"
 
