@@ -322,7 +322,7 @@ class Characters(GameBase, Owner):
 
     @property
     def user(self):
-        return session.query(Users).filter_by(player_id=self.pure_player_id).first()
+        return session.query(Users).filter_by(funcom_id=self.account.funcom_id).first()
 
     @property
     def pure_player_id(self):
@@ -455,7 +455,7 @@ class Users(UsersBase):
 
     @property
     def characters(self):
-        player_id = self.get_player_id(self.funcom_id)
+        player_id = str(self.get_player_id(self.funcom_id))
         characters = CharList(c for c in session.query(Characters)
                                                 .filter(Characters.player_id.like(player_id + '#_') |
                                                        (Characters.player_id==player_id))
