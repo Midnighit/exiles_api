@@ -188,7 +188,7 @@ class MembersManager:
             self.members[g]['numActiveMembers'] = 0
         return self.members
 
-# db-classes
+# game.db
 class Account(GameBase):
     __tablename__ = 'account'
     __table_args__ = {'autoload': True}
@@ -438,6 +438,7 @@ class ServerPopulationRecordings(GameBase):
     def __repr__(self):
         return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
 
+# supplemental.db
 class Users(UsersBase):
     __tablename__ = 'users'
     __bind_key__ = 'usersdb'
@@ -513,7 +514,7 @@ class OwnersCache(UsersBase, Owner):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update():
+    def update(ruins_clan_id=11):
         owners = cache = {}
         results = session.query(Guilds.id, Guilds.name).filter(Guilds.name!='Ruins').all()
         owners = {owner[0]: owner[1] for owner in results}
@@ -523,7 +524,7 @@ class OwnersCache(UsersBase, Owner):
         if not 0 in owners:
             owners[0] = 'Game Assets'
         if not 11 in owners:
-            owners[RUINS_CLAN_ID] = 'Ruins'
+            owners[ruins_clan_id] = 'Ruins'
         for id, name in owners.items():
             if not id in cache:
                 new_owner = OwnersCache(id=id, name=name)
@@ -552,7 +553,7 @@ class ObjectsCache(UsersBase):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update():
+    def update(ruins_clan_id=11):
         objects = cache = {}
         sqGuilds = session.query(Guilds.id)
         sqChars = session.query(Characters.id)
@@ -560,7 +561,7 @@ class ObjectsCache(UsersBase):
             Buildings.owner_id.notin_(sqChars) &
             Buildings.owner_id.notin_(sqGuilds) &
             (Buildings.owner_id != 0) |
-            (Buildings.owner_id == RUINS_CLAN_ID)).all()}
+            (Buildings.owner_id == ruins_clan_id)).all()}
         cache = {obj.id: obj.owner_unknown_since for obj in session.query(ObjectsCache).all()}
         for id, dt in cache.items():
             if not id in objects:
