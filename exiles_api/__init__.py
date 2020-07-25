@@ -276,7 +276,7 @@ class Guilds(GameBase, Owner):
 
     id = Column('guildId', Integer, primary_key=True, nullable=False)
     message_of_the_day = Column('messageOfTheDay', Text, default='')
-    owner_id = Column('owner', Integer, ForeignKey('characters.id'))
+    owner_id = Column('owner', Integer, ForeignKey('characters.id'), default='')
     # relationships
     owner = relationship('Characters', foreign_keys=[owner_id])
 
