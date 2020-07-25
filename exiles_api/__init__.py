@@ -286,7 +286,8 @@ class Guilds(GameBase, Owner):
 
     @property
     def last_login(self):
-        return CharList(self._members).last_to_login().last_login
+        if len(self._members) > 0:
+            return CharList(self._members).last_to_login().last_login
 
     def active_members(self, td):
         return CharList(member for member in self.members if not member.is_inactive(td))
@@ -523,7 +524,7 @@ class OwnersCache(UsersBase, Owner):
         cache = {owner.id: owner.name for owner in session.query(OwnersCache).all()}
         if not 0 in owners:
             owners[0] = 'Game Assets'
-        if not 11 in owners:
+        if not ruins_clan_id in owners:
             owners[ruins_clan_id] = 'Ruins'
         for id, name in owners.items():
             if not id in cache:
