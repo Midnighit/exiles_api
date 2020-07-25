@@ -40,7 +40,10 @@ def db_date():
 # non-db classes
 class Owner:
     def is_inactive(self, td):
-        return self.last_login < datetime.utcnow() - td
+        if self.last_login:
+            return self.last_login < datetime.utcnow() - td
+        else:
+            return None
 
     def has_tiles(self):
         return True if session.query(Buildings.object_id).filter_by(owner_id=self.id).first() else False
@@ -288,6 +291,8 @@ class Guilds(GameBase, Owner):
     def last_login(self):
         if len(self._members) > 0:
             return CharList(self._members).last_to_login().last_login
+        else:
+            return None
 
     def active_members(self, td):
         return CharList(member for member in self.members if not member.is_inactive(td))
