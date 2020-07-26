@@ -375,6 +375,19 @@ class Characters(GameBase, Owner):
     def __repr__(self):
         return f"<Characters(id={self.id}, name='{self.name}')>"
 
+class DestructionHistory(GameBase):
+    __tablename__ = 'destruction_history'
+    __table_args__ = {'autoload': True}
+    __bind_key__ = 'gamedb'
+
+    owner_id = Column(Integer, primary_key=True)
+    destroyed_by = Column(Text, primary_key=True)
+    object_type = Column(Integer, primary_key=True)
+    object_id = Column(Integer, primary_key=True)
+
+    def __repr__(self):
+        return f"<FollowerMarkers(owner_id={self.owner_id}, follower_id={self.follower_id})>"
+
 class FollowerMarkers(GameBase):
     __tablename__ = 'follower_markers'
     __table_args__ = {'autoload': True}
