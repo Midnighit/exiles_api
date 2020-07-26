@@ -43,7 +43,7 @@ class Owner:
         if self.last_login:
             return self.last_login < datetime.utcnow() - td
         else:
-            return None
+            return True
 
     def has_tiles(self):
         return True if session.query(Buildings.object_id).filter_by(owner_id=self.id).first() else False
