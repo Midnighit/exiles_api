@@ -520,14 +520,14 @@ class OwnersCache(UsersBase, Owner):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update(ruins_clan_id=11):
+    def update(ruins_clan_id=11, autocommit=True):
         owners = cache = {}
         results = session.query(Guilds.id, Guilds.name).filter(Guilds.name!='Ruins').all()
         owners = {owner[0]: owner[1] for owner in results}
         results = session.query(Characters.id, Characters.name).filter(Characters.name!='Ruins').all()
         owners.update({owner[0]: owner[1] for owner in results})
         cache = {owner.id: owner.name for owner in session.query(OwnersCache).all()}
-        if not 0 in owners:
+        if 0 not in owners:
             owners[0] = 'Game Assets'
         if not ruins_clan_id in owners:
             owners[ruins_clan_id] = 'Ruins'
@@ -538,7 +538,8 @@ class OwnersCache(UsersBase, Owner):
             elif cache[id] != owners[id]:
                 changed_owner = session.query(OwnersCache).get(id)
                 changed_owner.name = name
-        session.commit()
+        if autocommit:
+            session.commit()
 
     def __repr__(self):
         return f"<OwnersCache(id={self.id}, name='{self.name}')>"
@@ -559,7 +560,7 @@ class ObjectsCache(UsersBase):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update(ruins_clan_id=11):
+    def update(ruins_clan_id=11, autocommit=True):
         objects = cache = {}
         sqGuilds = session.query(Guilds.id)
         sqChars = session.query(Characters.id)
@@ -578,7 +579,8 @@ class ObjectsCache(UsersBase):
             if not id in cache:
                 new_obj = ObjectsCache(id=id, _timestamp=now)
                 session.add(new_obj)
-        session.commit()
+        if autocommit:
+            session.commit()
 
     @property
     def owner_unknown_since(self):
