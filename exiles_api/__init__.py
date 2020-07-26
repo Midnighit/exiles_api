@@ -258,6 +258,14 @@ class Buildings(GameBase):
 
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
 
+    @property
+    def owner(self):
+        char = session.query(Characters).filter_by(id=self.owner_id).first()
+        if char:
+            return char
+        guild = session.query(Guilds).filter_by(id=self.owner_id).first()
+        return guild
+
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
 
