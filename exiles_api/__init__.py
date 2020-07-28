@@ -352,12 +352,12 @@ class Characters(GameBase, Owner):
         if not isinstance(characters, (dict, list, set, tuple)):
             characters = tuple(characters)
         session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(CharacterStats).filter_by(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter_by(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter_by(ItemProperties.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Properties).filter_by(Properties.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Purgescores).filter_by(Purgescores.purge_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Characters).filter_by(Characters.id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Purgescores).filter(Purgescores.purge_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Characters).filter(Characters.id.in_(characters)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
