@@ -96,12 +96,12 @@ class Tiles:
     def remove(objects, autocommit=True):
         if not isinstance(objects, (dict, list, set, tuple)):
             objects = tuple(objects)
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(objects)).delete()
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete()
-        session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete()
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete()
-        session.query(Properties).filter(Properties.object_id.in_(objects)).delete()
-        session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete()
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
@@ -351,13 +351,13 @@ class Characters(GameBase, Owner):
     def remove(characters, autocommit=True):
         if not isinstance(characters, (dict, list, set, tuple)):
             characters = tuple(characters)
-        session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete()
-        session.query(CharacterStats).filter_by(CharacterStats.char_id.in_(characters)).delete()
-        session.query(ItemInventory).filter_by(ItemInventory.owner_id.in_(characters)).delete()
-        session.query(ItemProperties).filter_by(ItemProperties.owner_id.in_(characters)).delete()
-        session.query(Properties).filter_by(Properties.owner_id.in_(characters)).delete()
-        session.query(Purgescores).filter_by(Purgescores.purge_id.in_(characters)).delete()
-        session.query(Characters).filter_by(Characters.id.in_(characters)).delete()
+        session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(CharacterStats).filter_by(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter_by(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter_by(ItemProperties.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Properties).filter_by(Properties.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Purgescores).filter_by(Purgescores.purge_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Characters).filter_by(Characters.id.in_(characters)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
