@@ -431,7 +431,7 @@ class GameEvents(GameBase):
     __table_args__ = {'autoload': True}
     __bind_key__ = 'gamedb'
 
-    world_time = Column('wordlTime', Integer, primary_key=True)
+    world_time = Column('worldTime', Integer, primary_key=True)
     event_type = Column('eventType', Integer, primary_key=True)
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
 
