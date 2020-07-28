@@ -355,7 +355,7 @@ class Characters(GameBase, Owner):
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemProperties).filter(ItemProperties.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.owner_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(Purgescores).filter(Purgescores.purge_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(Characters).filter(Characters.id.in_(characters)).delete(synchronize_session='fetch')
         if autocommit:
