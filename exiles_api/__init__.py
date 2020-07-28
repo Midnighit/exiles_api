@@ -644,6 +644,56 @@ class ObjectsCache(UsersBase):
     def __repr__(self):
         return f"<ObjectsCache(id={self.id}, owner_unknown_since='{self.owner_unknown_since}')>"
 
+class DeleteChars(UsersBase):
+    __tablename__ = 'delete_chars'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    player_id = Column(Text, unique=True, nullable=False)
+    name = Column(Text, nullable=False)
+
+    @staticmethod
+    def add(chars, autocommit=True):
+        for player_id, name in chars.items():
+            dc = session.query(DeleteChars).filter_by(player_id=player_id).first()
+            if dc:
+                dc.name = name
+            else:
+                session.add(DeleteChars(player_id=player_id, name=name))
+        if autocommit:
+            session.commit()
+
+    def __repr__(self):
+        return f"<DeleteChars(id={self.id}, player_id='{self.player_id}', name='{self.name}')>"
+
+class GlobalVars(UsersBase):
+    __tablename__ = 'global_vars'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, unique=True, nullable=False)
+    value = Column(Text)
+
+    @staticmethod
+    def get_value(name):
+         value, = session.query(GlobalVars.value).filter_by(name=name).first()
+         return value
+
+    @staticmethod
+    def set_value(name, value, autocommit=False):
+        gv = session.query(GlobalVars).filter_by(name=name).first()
+        if gv:
+            gv.value = value
+        else:
+            gv = GlobalVars(name=name, value=value)
+            session.add(gv)
+        if autocommit:
+            session.commit()
+        return gv
+
+    def __repr__(self):
+        return f"<DeleteChars(id={self.id}, name='{self.name}', value='{self.value}')>"
+
 class Applications(UsersBase):
     __tablename__ = 'applications'
     __bind_key__ = 'usersdb'
