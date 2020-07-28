@@ -140,3 +140,8 @@ logs/
 # test
 test.*
 config.py
+
+# archives
+*.zip
+*.rar
+*.7z
