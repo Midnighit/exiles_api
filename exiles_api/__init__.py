@@ -351,6 +351,10 @@ class Characters(GameBase, Owner):
     def remove(characters, autocommit=True):
         if not isinstance(characters, (dict, list, set, tuple)):
             characters = (characters,)
+        for id in characters:
+            guild = session.query(Characters).get(id).guild
+            if guild and guild.members == 0:
+                session.delete(char.guild)
         session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
