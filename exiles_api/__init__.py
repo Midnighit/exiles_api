@@ -300,7 +300,7 @@ class Guilds(GameBase, Owner):
 
     id = Column('guildId', Integer, primary_key=True, nullable=False)
     message_of_the_day = Column('messageOfTheDay', Text, default='')
-    owner_id = Column('owner', Integer, ForeignKey('characters.id'), default='')
+    owner_id = Column('owner', Integer, ForeignKey('characters.id'), default=0)
     # relationships
     owner = relationship('Characters', foreign_keys=[owner_id])
 
@@ -354,7 +354,7 @@ class Characters(GameBase, Owner):
         for id in characters:
             guild = session.query(Characters).get(id).guild
             if guild and guild.members == 0:
-                session.delete(char.guild) 
+                session.delete(char.guild)
         session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
