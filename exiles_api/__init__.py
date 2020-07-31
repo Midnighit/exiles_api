@@ -548,7 +548,7 @@ class Users(UsersBase):
 
     @staticmethod
     def get_users(value):
-        if len(str(value)) == 18 and str(value).isnumeric():
+        if len(str(value)) >= 17 and str(value).isnumeric():
             result = session.query(Users).filter_by(disc_id=value).first()
             if result:
                 return [result]
