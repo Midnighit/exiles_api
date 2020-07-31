@@ -1,4 +1,5 @@
 from config import *
+from math import ceil, sqrt
 from datetime import datetime
 from sqlalchemy import create_engine, desc, MetaData
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
@@ -39,6 +40,10 @@ def db_date():
 
 # non-db classes
 class Owner:
+    @property
+    def buildings(self):
+        return session.query(Buildings).filter_by(owner_id=self.id).all()
+
     def is_inactive(self, td):
         if self.last_login:
             return self.last_login < datetime.utcnow() - td
@@ -236,6 +241,19 @@ class ActorPosition(GameBase):
 
     class_ = Column('class', Text)
     id = Column(Integer, primary_key=True, nullable=False)
+    # relationship
+    building = relationship("Buildings", uselist=False, back_populates="position")
+
+    @property
+    def tp(self):
+        return f"TeleportPlayer {int(round(self.x, 0))} {int(round(self.y, 0))} {ceil(self.z)}"
+
+    def distance_to(self, pos):
+        return int(round(sqrt((self.x - pos.x)**2 + (self.y - pos.y)**2 + (self.z - pos.z)**2), 0))
+
+    @staticmethod
+    def distance_between(pos1, pos2):
+        return int(round(sqrt((pos1.x - pos2.x)**2 + (pos1.y - pos2.y)**2 + (pos1.z - pos2.z)**2), 0))
 
     def __repr__(self):
         return f"<ActorPosition(id={self.id}, class='{self.class_}')>"
@@ -270,6 +288,8 @@ class Buildings(GameBase):
     __bind_key__ = 'gamedb'
 
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
+    # relationship
+    position = relationship("ActorPosition", uselist=False, back_populates="building")
 
     @property
     def owner(self):
