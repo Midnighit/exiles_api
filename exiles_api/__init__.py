@@ -700,11 +700,11 @@ class GlobalVars(UsersBase):
 
     @staticmethod
     def get_value(name):
-         value, = session.query(GlobalVars.value).filter_by(name=name).first()
-         return value
+        value = session.query(GlobalVars.value).filter_by(name=name).first()
+        return value[0] if value else None
 
     @staticmethod
-    def set_value(name, value, autocommit=False):
+    def set_value(name, value, autocommit=True):
         gv = session.query(GlobalVars).filter_by(name=name).first()
         if gv:
             gv.value = value
@@ -716,7 +716,7 @@ class GlobalVars(UsersBase):
         return gv
 
     def __repr__(self):
-        return f"<DeleteChars(id={self.id}, name='{self.name}', value='{self.value}')>"
+        return f"<GlobalVars(id={self.id}, name='{self.name}', value='{self.value}')>"
 
 class Applications(UsersBase):
     __tablename__ = 'applications'
