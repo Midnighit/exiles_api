@@ -373,8 +373,8 @@ class Characters(GameBase, Owner):
             characters = (characters,)
         for id in characters:
             guild = session.query(Characters).get(id).guild
-            if guild and guild.members == 1:
-                session.delete(char.guild)
+            if guild and len(guild.members) == 1:
+                session.delete(guild)
         session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
