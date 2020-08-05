@@ -357,7 +357,7 @@ class Characters(GameBase, Owner):
     # relationship
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
     _account = relationship("Account", uselist=False, back_populates="_character")
-
+<
     @staticmethod
     def get_users(value):
         results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
@@ -372,9 +372,19 @@ class Characters(GameBase, Owner):
         if not isinstance(characters, (dict, list, set, tuple)):
             characters = (characters,)
         for id in characters:
-            guild = session.query(Characters).get(id).guild
-            if guild and len(guild.members) == 1:
-                session.delete(guild)
+            char = session.query(Characters).get(id)
+            player_id = char.pure_player_id
+            # if char is the last character in its guild also remove the guild
+            if char.guild and len(char.guild.members) == 1:
+                session.delete(char.guild)
+            filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id==player_id)
+            # if char is the last character with the given player_id also remove it from the account table
+            num = session.query(func.count(Characters.id)).filter(filter).order_by(Characters.id).scalar()
+            if num == 1:
+                acc = session.query(Account).filter_by(player_id=player_id).first()
+                if acc:
+                    session.delete(acc)
+
         session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
         session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
