@@ -357,7 +357,7 @@ class Characters(GameBase, Owner):
     # relationship
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
     _account = relationship("Account", uselist=False, back_populates="_character")
-
+<
     @staticmethod
     def get_users(value):
         results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
