@@ -1,7 +1,7 @@
 from config import *
 from math import ceil, sqrt
 from datetime import datetime
-from sqlalchemy import create_engine, desc, MetaData
+from sqlalchemy import create_engine, literal, desc, MetaData
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean
@@ -246,13 +246,15 @@ class TilesManager:
 class MembersManager:
     @staticmethod
     def _get_guilds_query(threshold):
-        subquery = session.query(Buildings.owner_id).subquery()
-        return session.query(Characters.guild_id, Guilds.name, func.count(Characters.guild_id), Characters._last_login) \
-                      .filter(Characters.guild_id!=None,
-                              Characters._last_login>=threshold,
-                              Guilds.id==Characters.guild_id,
-                              Characters.guild_id.in_(subquery)) \
-                      .group_by(Characters.guild_id)
+        C = Characters
+        G = Guilds
+        subquery1 = session.query(C.guild_id).filter(C.guild_id != None)
+        empty_guilds = session.query(G.id, G.name, literal('0').label("members"), literal('0').label("last_login")).filter(G.id.notin_(subquery1))
+        subquery2 = session.query(Buildings.owner_id).subquery()
+        query = C.guild_id, G.name, func.count(C.guild_id), C._last_login
+        filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id, C.guild_id.in_(subquery2)
+        populated_guilds = session.query(*query).filter(*filter).group_by(C.guild_id)
+        return empty_guilds.union(populated_guilds)
 
     @staticmethod
     def _get_chars_query():
