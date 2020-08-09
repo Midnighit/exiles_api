@@ -140,43 +140,112 @@ class CharList(tuple):
         return CharList(c for c in self if c.last_login < datetime.utcnow() - td)
 
 class TilesManager:
-    def __init__(self):
+    @classmethod
+    def get_tiles_by_owner(cls, bMult=1, pMult=1, do_round=True):
         # stores all tiles indexed by their respective owners
-        self.tiles = {}
+        tiles = {}
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
-        self.root = set()
-
-    def get_tiles_by_owner(self, bMult=1, pMult=1, do_round=True):
+        root = set()
         # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated objects
         for res in session.query(Buildings.object_id, Buildings.owner_id, func.count(Buildings.object_id)) \
                           .filter(Buildings.object_id==BuildingInstances.object_id) \
                           .group_by(Buildings.object_id).all():
             # create a new dict entry if owner does not have one yet
-            if not res[1] in self.tiles:
-                self.tiles[res[1]] = res[2] * bMult
+            if not res[1] in tiles:
+                tiles[res[1]] = res[2] * bMult
             # add aggregated tiles if one already exists
             else:
-                self.tiles[res[1]] += res[2] * bMult
+                tiles[res[1]] += res[2] * bMult
             # remember the object_id as root object in either case
-            self.root.add(res[0])
+            root.add(res[0])
 
         # res has format: (object_id, owner_id) contains all building tiles and placeables
         for res in session.query(Buildings.object_id, Buildings.owner_id).filter(Buildings.object_id==ActorPosition.id).all():
             # if object is not a root object, it is a placeable and needs to be added now
-            if not res[0] in self.root:
+            if not res[0] in root:
                 # if owner is not in tiles (i.e. owner has no building tiles) create a new dict entry
-                if not res[1] in self.tiles:
-                    self.tiles[res[1]] = pMult
+                if not res[1] in tiles:
+                    tiles[res[1]] = pMult
                 # otherwise add it to the count
                 else:
-                    self.tiles[res[1]] += pMult
+                    tiles[res[1]] += pMult
         if do_round:
-            for owner_id, value in self.tiles.items():
-                self.tiles[owner_id] = int(round(value, 0))
-        return self.tiles
+            for owner_id, value in tiles.items():
+                tiles[owner_id] = int(round(value, 0))
+        return tiles
+
+    @staticmethod
+    def get_tiles_consolidated(bMult=1, pMult=1, min_dist=50000, do_round=True):
+        AP = ActorPosition
+        B = Buildings
+        BI = BuildingInstances
+        tiles_to_consolidate = {}
+        owner_index = {}
+        query = (AP.x, AP.y, AP.z, AP.class_, B.object_id, B.owner_id, func.count(B.object_id))
+        filter = (AP.id == B.object_id) & (B.object_id == BI.object_id)
+        # get all Building pieces and their associated coordiantes and owners excluding pure placeables
+        for x, y, z, class_, object_id, owner_id, tiles in session.query(*query).filter(filter).group_by(B.object_id).all():
+            _, _, c = class_.partition('.')
+            tiles_to_consolidate[object_id] = {'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': tiles * bMult}
+            # keep a second dict to allow us to find all the objects belonging to an object_id
+            if owner_id in owner_index:
+                owner_index[owner_id] += [object_id]
+            else:
+                owner_index[owner_id] = [object_id]
+
+        query = (AP.x, AP.y, AP.z, AP.class_, B.object_id, B.owner_id)
+        filter = (AP.id == B.object_id)
+        # get all placeables and their associated attributes
+        for x, y, z, class_, object_id, owner_id in session.query(*query).filter(filter).all():
+            # disregard building pieces that have already been added in the first loop
+            if object_id in tiles_to_consolidate:
+                continue
+            _, _, c = class_.partition('.')
+            tiles_to_consolidate[object_id] = {'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': pMult}
+            # update the owner_index with the placeables
+            if owner_id in owner_index:
+                owner_index[owner_id] += [object_id]
+            else:
+                owner_index[owner_id] = [object_id]
+
+        tiles_consolidated = {}
+        tiles_per_owner = {}
+        # do the consolidating
+        for owner_id, object_ids in owner_index.items():
+            # remember which objects were within min_dist of another
+            remove = set()
+            # go through all objects belonging to a single owner
+            for i in range(len(object_ids)):
+                # if object is within min_dist skip to the next
+                if object_ids[i] in remove:
+                    continue
+                # if object wasn't removed yet add it to the final list
+                tiles_consolidated[object_ids[i]] = tiles_to_consolidate[object_ids[i]]
+                # go through all the remaining objects belonging to the same owner
+                for j in range(i + 1, len(object_ids)):
+                    # calculate distance to comparison object
+                    dist = sqrt((tiles_to_consolidate[object_ids[i]]['x'] - tiles_to_consolidate[object_ids[j]]['x'])**2 +
+                                (tiles_to_consolidate[object_ids[i]]['y'] - tiles_to_consolidate[object_ids[j]]['y'])**2 +
+                                (tiles_to_consolidate[object_ids[i]]['z'] - tiles_to_consolidate[object_ids[j]]['z'])**2)
+                    # if distance is shorter put it on the remove list and add tiles to current object
+                    if dist <= min_dist:
+                        remove.add(object_ids[j])
+                        tiles_consolidated[object_ids[i]]['tiles'] += tiles_to_consolidate[object_ids[j]]['tiles']
+                # for each owner store the absolute number of tiles to tiles_per_owner
+                if owner_id in tiles_per_owner:
+                    tiles_per_owner[owner_id] += tiles_consolidated[object_ids[i]]['tiles']
+                else:
+                    tiles_per_owner[owner_id] = tiles_consolidated[object_ids[i]]['tiles']
+
+        # go through all consolidated objects and add the absolute number of tiles for that owner
+        for object_id, ctd in tiles_consolidated.items():
+            ctd['sum_tiles'] = tiles_per_owner[ctd['owner_id']]
+
+        return tiles_consolidated
 
 class MembersManager:
-    def _get_guilds_query(self, threshold):
+    @staticmethod
+    def _get_guilds_query(threshold):
         subquery = session.query(Buildings.owner_id).subquery()
         return session.query(Characters.guild_id, Guilds.name, func.count(Characters.guild_id), Characters._last_login) \
                       .filter(Characters.guild_id!=None,
@@ -185,29 +254,31 @@ class MembersManager:
                               Characters.guild_id.in_(subquery)) \
                       .group_by(Characters.guild_id)
 
-    def _get_chars_query(self):
+    @staticmethod
+    def _get_chars_query():
         subquery = session.query(Buildings.owner_id).subquery()
         return session.query(Characters.id, Characters.name, Characters._last_login) \
                       .filter(Characters.guild_id==None, Characters.id.in_(subquery))
 
-    def get_members(self, td=None):
-        self.members = {}
+    @classmethod
+    def get_members(cls, td=None):
+        members = {}
         threshold = int((datetime.utcnow() - td).timestamp()) if td is not None else 0
         owners = set()
-        for g in self._get_guilds_query(0).all():
+        for g in cls._get_guilds_query(0).all():
             owners.add(g[0])
-            self.members[g[0]] = {'name': g[1], 'numMembers': g[2], 'numActiveMembers': g[2]}
-        for c in self._get_chars_query().all():
+            members[g[0]] = {'name': g[1], 'numMembers': g[2], 'numActiveMembers': g[2]}
+        for c in cls._get_chars_query().all():
             numActiveMembers = 1 if c[2] >= threshold else 0
-            self.members[c[0]] = {'name': c[1], 'numMembers': 1, 'numActiveMembers': numActiveMembers}
+            members[c[0]] = {'name': c[1], 'numMembers': 1, 'numActiveMembers': numActiveMembers}
         if td is None:
-            return self.members
-        for g in self._get_guilds_query(threshold):
+            return members
+        for g in cls._get_guilds_query(threshold):
             owners.remove(g[0])
-            self.members[g[0]]['numActiveMembers'] = g[2]
+            members[g[0]]['numActiveMembers'] = g[2]
         for g in owners:
-            self.members[g]['numActiveMembers'] = 0
-        return self.members
+            members[g]['numActiveMembers'] = 0
+        return members
 
 # game.db
 class Account(GameBase):
@@ -341,6 +412,13 @@ class Guilds(GameBase, Owner):
     def inactive_members(self, td):
         return CharList(member for member in self.members if member.is_inactive(td))
 
+    @property
+    def is_guild(self):
+        return True
+
+    @property
+    def is_character(self):
+        return False
     def __repr__(self):
         return f"<Guilds(id={self.id}, name='{self.name}')>"
 
@@ -432,6 +510,14 @@ class Characters(GameBase, Owner):
         elif not self.rank in (0, 1, 2, 3):
             return RANKS[3]
         return RANKS[self.rank]
+
+    @property
+    def is_guild(self):
+        return False
+
+    @property
+    def is_character(self):
+        return True
 
     def __repr__(self):
         return f"<Characters(id={self.id}, name='{self.name}')>"
