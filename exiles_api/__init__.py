@@ -260,7 +260,7 @@ class MembersManager:
     def _get_chars_query():
         subquery = session.query(Buildings.owner_id).subquery()
         return session.query(Characters.id, Characters.name, Characters._last_login) \
-                      .filter(Characters.guild_id==None, Characters.id.in_(subquery))
+                      .filter(Characters.id.in_(subquery))
 
     @classmethod
     def get_members(cls, td=None):
