@@ -249,7 +249,7 @@ class MembersManager:
         C = Characters
         G = Guilds
         subquery1 = session.query(C.guild_id).filter(C.guild_id != None)
-        empty_guilds = session.query(G.id, G.name, literal('0').label("members"), literal('0').label("last_login")).filter(G.id.notin_(subquery1))
+        empty_guilds = session.query(G.id, G.name, literal(0).label("members"), literal(0).label("last_login")).filter(G.id.notin_(subquery1))
         subquery2 = session.query(Buildings.owner_id).subquery()
         query = C.guild_id, G.name, func.count(C.guild_id), C._last_login
         filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id, C.guild_id.in_(subquery2)
