@@ -1,3 +1,4 @@
+import os
 from config import *
 from math import ceil, sqrt
 from datetime import datetime
@@ -39,6 +40,43 @@ def db_date():
     return None
 
 # non-db classes
+class ChatLogs:
+    files = []
+
+    def __init__(self, path, after_date=None):
+        self.path = path
+        filelist = os.listdir(path)
+        filelist.sort()
+        for filename in filelist:
+            if filename.startswith('ConanSandbox'):
+                if filename.startswith('ConanSandbox-backup'):
+                    date = datetime.strptime(filename[20:39], '%Y.%m.%d-%H.%M.%S')
+                    if not after_date or date > after_date:
+                        self.files.append({'name': filename, 'date': date})
+                else:
+                    self.files.insert(0, {'name': filename, 'date': None})
+
+    def lines(self, index):
+        if type(index) is int and index <= len(self.files) - 1:
+            filename = self.files[index]['name']
+        elif type(index) is str and index.startswith('ConanSandbox'):
+            for i in range(len(self.files)):
+                if files[i]['name'] == index:
+                    filename = index
+                    index = i
+                    break
+        else:
+            print("file not found.")
+            return False
+        file = os.path.join(self.path, filename)
+        with open(file, 'r') as f:
+            lines = f.readlines()
+        self.files[index]['lines'] = lines
+        return True
+
+    def chat_lines(self, file=None):
+        pass
+
 class Owner:
     @property
     def buildings(self):
@@ -902,6 +940,18 @@ class TextBlocks(UsersBase):
 
     def __repr__(self):
         return f"<TextBlocks(id={self.id}, name='{self.name}', content='{self.content}')>"
+
+class MagicUsers(UsersBase):
+    __tablename__ = 'magic_users'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    char_name = Column(String)
+    char_id = Column(Integer, nullable=False)
+    active = Column(Boolean, default=True)
+
+    def __repr__(self):
+        return f"<MagicUsers(id={self.id}, char_name='{self.char_name}', char_id={self.char_id}, active='{self.active}')>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
