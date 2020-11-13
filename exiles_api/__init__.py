@@ -947,6 +947,7 @@ class MagicChars(UsersBase):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    mana = Column(Integer, default=0)
     active = Column(Boolean, default=True)
 
     def __repr__(self):
