@@ -941,17 +941,16 @@ class TextBlocks(UsersBase):
     def __repr__(self):
         return f"<TextBlocks(id={self.id}, name='{self.name}', content='{self.content}')>"
 
-class MagicUsers(UsersBase):
-    __tablename__ = 'magic_users'
+class MagicChars(UsersBase):
+    __tablename__ = 'magic_chars'
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    char_name = Column(String)
-    char_id = Column(Integer, nullable=False)
+    name = Column(String)
     active = Column(Boolean, default=True)
 
     def __repr__(self):
-        return f"<MagicUsers(id={self.id}, char_name='{self.char_name}', char_id={self.char_id}, active='{self.active}')>"
+        return f"<MagicUsers(id={self.id}, name='{self.char_name}', active='{self.active}')>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
