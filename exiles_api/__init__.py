@@ -948,10 +948,12 @@ class MagicChars(UsersBase):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     mana = Column(Integer, default=0)
+    uses = Column(Integer, default=0)
+    last_use = Column(Integer, default=None)
     active = Column(Boolean, default=True)
 
     def __repr__(self):
-        return f"<MagicUsers(id={self.id}, name='{self.char_name}', active='{self.active}')>"
+        return f"<MagicUsers(id={self.id}, name='{self.name}', mana={self.mana}, active='{self.active}')>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
