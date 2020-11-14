@@ -948,7 +948,8 @@ class MagicChars(UsersBase):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     mana = Column(Integer, default=0)
-    uses = Column(Integer, default=0)
+    total_uses = Column(Integer, default=0)
+    total_spent = Column(Integer, default=0)
     last_use = Column(Integer, default=None)
     active = Column(Boolean, default=True)
 
