@@ -1,6 +1,7 @@
 import os
 from config import *
 from math import ceil, sqrt
+from struct import unpack
 from datetime import datetime
 from sqlalchemy import create_engine, literal, desc, MetaData
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
@@ -151,6 +152,39 @@ class Tiles:
     def __repr__(self):
         return f"<Tiles(owner_id={self.owner_id}, object_id={self.object_id}, amount={self.amount}, type='{self.type}')>"
 
+class Thralls:
+    def __init__(self, *args, **kwargs):
+        self.owner_id = kwargs.get("owner_id")
+        self.object_id = kwargs.get("object_id")
+        self.type = 'Thrall'
+
+    @property
+    def owner(self):
+        if self.owner_id:
+            return session.query(Characters).filter(Characters.id==self.owner_id).first() or \
+                   session.query(Guilds).filter(Guilds.id==self.owner_id).first()
+        elif self.object_id:
+            property = session.query(Properties).filter_by(object_id=self.object_id).first()
+            if property:
+                return property.owner
+        return None
+
+    @staticmethod
+    def remove(objects, autocommit=True):
+        if not isinstance(objects, (dict, list, set, tuple)):
+            objects = (objects,)
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    def __repr__(self):
+        return f"<Thrall(owner_id={self.owner_id}, object_id={self.object_id}, type='{self.type}')>"
+
 class BuildingTiles(Tiles):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -162,6 +196,7 @@ class Placeables(Tiles):
         self.type = 'Placeable'
 
 class CharList(tuple):
+    @property
     def last_to_login(self):
         last = datetime(year=1970, month=1, day=1)
         res = None
@@ -176,6 +211,42 @@ class CharList(tuple):
 
     def inactive(self, td):
         return CharList(c for c in self if c.last_login < datetime.utcnow() - td)
+
+class PropertiesList(tuple):
+    @property
+    def is_thrall(self):
+        for p in self:
+            if "OwnerUniqueID" in p.name:
+                return True
+        return False
+
+    @property
+    def owner_id(self):
+        for p in self:
+            if "OwnerUniqueID" in p.name:
+                return unpack("<Q", p.value[-8:])[0]
+        return None
+
+    @property
+    def name(self):
+        for p in self:
+            if "PetName" in p.name or "ThrallName" in p.name:
+                try:
+                    nam = p.value[21:-1].decode("utf-8")
+                except:
+                    nam = p.value[21:-2].decode("utf-16")
+                return nam
+            return None
+
+    @property
+    def owner(self):
+        id = self.owner_id
+        if id is None:
+            return None
+        result = session.query(Guilds).filter_by(id=id).first()
+        if not result:
+            result = session.query(Characters).filter_by(id=id).first()
+        return result
 
 class TilesManager:
     @classmethod
@@ -354,6 +425,7 @@ class ActorPosition(GameBase):
     id = Column(Integer, primary_key=True, nullable=False)
     # relationship
     building = relationship("Buildings", uselist=False, back_populates="position")
+    _properties = relationship("Properties", back_populates="position")
 
     @property
     def tp(self):
@@ -365,6 +437,10 @@ class ActorPosition(GameBase):
     @staticmethod
     def distance_between(pos1, pos2):
         return int(round(sqrt((pos1.x - pos2.x)**2 + (pos1.y - pos2.y)**2 + (pos1.z - pos2.z)**2), 0))
+
+    @property
+    def properties(self):
+        return PropertiesList(self._properties)
 
     def __repr__(self):
         return f"<ActorPosition(id={self.id}, class='{self.class_}')>"
@@ -442,7 +518,7 @@ class Guilds(GameBase, Owner):
     @property
     def last_login(self):
         if len(self._members) > 0:
-            return CharList(self._members).last_to_login().last_login
+            return CharList(self._members).last_to_login.last_login
         else:
             return None
 
@@ -628,6 +704,80 @@ class Properties(GameBase):
 
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
     name = Column(Text, primary_key=True, nullable=False)
+    # relationship
+    position = relationship("ActorPosition", uselist=False, back_populates="_properties")
+
+    @staticmethod
+    def get_thrall_object_ids(name=None, owner_id=None, strict=False):
+        objects = []
+        if name:
+            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%Thrallname%"))
+            for p in session.query(Properties).filter(name_filter).all():
+                try:
+                    nam = p.value[21:-1].decode("utf-8")
+                except:
+                    nam = p.value[21:-2].decode("utf-16")
+                if (strict and name == nam) or (not strict and name in nam):
+                    objects.append(p.object_id)
+        elif owner_id:
+            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
+                own_id = unpack("<Q", p.value[-8:])[0]
+                if owner_id == own_id:
+                    objects.append(p.object_id)
+        return objects
+
+    @staticmethod
+    def get_thrall_owners(name=None, object_id=None, strict=False):
+        owners = []
+        if name:
+            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%Thrallname%"))
+            for p in session.query(Properties).filter(name_filter).all():
+                try:
+                    nam = p.value[21:-1].decode("utf-8")
+                except:
+                    nam = p.value[21:-2].decode("utf-16")
+                if (strict and name == nam) or (not strict and name in nam):
+                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
+                    po = session.query(Properties).filter(owner_filter).first()
+                    if po:
+                        owners.append(po.owner)
+        elif object_id:
+            owner_filter = (Properties.object_id==object_id) & (Properties.name.like("%OwnerUniqueID%"))
+            p = session.query(Properties).filter(owner_filter).first()
+            if p:
+                owners.append(p.owner)
+        return owners
+
+    @property
+    def is_thrall(self):
+        if "OwnerUniqueID" in self.name or "PetName" in self.name or "ThrallName" in self.name:
+            return True
+        return False
+
+    @property
+    def thrall_name(self):
+        if "PetName" in self.name or "ThrallName" in self.name:
+            try:
+                nam = self.value[21:-1].decode("utf-8")
+            except:
+                nam = self.value[21:-2].decode("utf-16")
+            return name
+
+    @property
+    def owner_id(self):
+        if "OwnerUniqueID" in self.name:
+            return unpack("<Q", self.value[-8:])[0]
+        return None
+
+    @property
+    def owner(self):
+        id = self.owner_id
+        if id is None:
+            return None
+        result = session.query(Guilds).filter_by(id=id).first()
+        if not result:
+            result = session.query(Characters).filter_by(id=id).first()
+        return result
 
     def __repr__(self):
         return f"<Properties(object_id={self.object_id}, name='{self.name}')>"
