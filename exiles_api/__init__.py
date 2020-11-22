@@ -144,6 +144,8 @@ class Tiles:
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
         if autocommit:
@@ -173,11 +175,10 @@ class Thralls:
     def remove(objects, autocommit=True):
         if not isinstance(objects, (dict, list, set, tuple)):
             objects = (objects,)
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(objects)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(objects)).delete(synchronize_session='fetch')
         session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
