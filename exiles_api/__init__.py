@@ -237,7 +237,7 @@ class PropertiesList(tuple):
                 except:
                     nam = p.value[21:-2].decode("utf-16")
                 return nam
-            return None
+        return None
 
     @property
     def owner(self):
