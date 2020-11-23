@@ -712,13 +712,13 @@ class Properties(GameBase):
     def get_thrall_object_ids(name=None, owner_id=None, strict=False):
         objects = []
         if name:
-            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%Thrallname%"))
+            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%ThrallName%"))
             for p in session.query(Properties).filter(name_filter).all():
                 try:
                     nam = p.value[21:-1].decode("utf-8")
                 except:
                     nam = p.value[21:-2].decode("utf-16")
-                if (strict and name == nam) or (not strict and name in nam):
+                if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
                     objects.append(p.object_id)
         elif owner_id:
             for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
@@ -737,7 +737,7 @@ class Properties(GameBase):
                     nam = p.value[21:-1].decode("utf-8")
                 except:
                     nam = p.value[21:-2].decode("utf-16")
-                if (strict and name == nam) or (not strict and name in nam):
+                if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
                     owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
