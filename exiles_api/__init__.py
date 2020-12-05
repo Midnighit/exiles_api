@@ -1,4 +1,4 @@
-import os
+import os, json
 from config import *
 from math import ceil, sqrt
 from struct import unpack
@@ -709,17 +709,57 @@ class Properties(GameBase):
     position = relationship("ActorPosition", uselist=False, back_populates="_properties")
 
     @staticmethod
+    def _get_name(p, names=None):
+        # if thrall name has been changed by the player it's stored in a row with PetName or ThrallName as name
+        if "PetName" in p.name or "ThrallName" in p.name:
+            # the codec type (negative = utf-16, positive = utf-8) and string length are in bytes 17-21
+            type = unpack("l", p.value[17:21])[0]
+            res = (21 + type - 1, "utf-8") if type > 0 else (21 + (abs(type) - 1) * 2, "utf-16")
+            return p.value[21:res[0]].decode(res[1])
+        # if thrall still has default game name it has to be derived from the TemplateTableSpawn.json
+        elif "ThrallInfo" in p.name and (names or os.path.isfile('TemplateTableSpawn.json')):
+            end = 12 + unpack("l", p.value[8:12])[0] - 1
+            thrall_class = p.value[12:end].decode("utf-8")
+            if not names:
+                with open('TemplateTableSpawn.json') as json_file:
+                    spawns = json.load(json_file)
+                for template in spawns:
+                    if template['RowName'] == thrall_class:
+                        return eval(template['Name'][9:])[2]
+            else:
+                return names.get(thrall_class)
+        return None
+
+    @staticmethod
     def get_thrall_object_ids(name=None, owner_id=None, strict=False):
         objects = []
         if name:
-            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%ThrallName%"))
+            names = {}
+            # read class <=> name link from json if available
+            if os.path.isfile('TemplateTableSpawn.json'):
+                with open('TemplateTableSpawn.json') as json_file:
+                    spawns = json.load(json_file)
+                for template in spawns:
+                    names[template['RowName']] = eval(template['Name'][9:])[2]
+
+            # thralls with custom names
+            name_filter = (Properties.name.like("%PetName")) | (Properties.name.like("%ThrallName"))
+            custom_name_ids_query = session.query(Properties.object_id).filter(name_filter)
+            # thralls with no custom names
+            info_filter = (Properties.name.like("%ThrallInfo")) & (Properties.object_id.notin_(custom_name_ids_query))
+
+            # get object_ids for thralls with custom names
             for p in session.query(Properties).filter(name_filter).all():
-                try:
-                    nam = p.value[21:-1].decode("utf-8")
-                except:
-                    nam = p.value[21:-2].decode("utf-16")
+                nam = Properties._get_name(p)
                 if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
                     objects.append(p.object_id)
+
+            for p in session.query(Properties).filter(info_filter).all():
+                nam = Properties._get_name(p, names)
+                n = nam if nam else "None"
+                if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
+                    objects.append(p.object_id)
+
         elif owner_id:
             for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
                 own_id = unpack("<Q", p.value[-8:])[0]
@@ -731,17 +771,39 @@ class Properties(GameBase):
     def get_thrall_owners(name=None, object_id=None, strict=False):
         owners = []
         if name:
-            name_filter = (Properties.name.like("%PetName%")) | (Properties.name.like("%Thrallname%"))
+            names = {}
+            # read class <=> name link from json if available
+            if os.path.isfile('TemplateTableSpawn.json'):
+                with open('TemplateTableSpawn.json') as json_file:
+                    spawns = json.load(json_file)
+                for template in spawns:
+                    names[template['RowName']] = eval(template['Name'][9:])[2]
+
+            # thralls with custom names
+            name_filter = (Properties.name.like("%PetName")) | (Properties.name.like("%ThrallName"))
+            custom_name_ids_query = session.query(Properties.object_id).filter(name_filter)
+            # thralls with no custom names
+            info_filter = (Properties.name.like("%ThrallInfo")) & (Properties.object_id.notin_(custom_name_ids_query))
+
+            # get owners for thralls with custom names
             for p in session.query(Properties).filter(name_filter).all():
-                try:
-                    nam = p.value[21:-1].decode("utf-8")
-                except:
-                    nam = p.value[21:-2].decode("utf-16")
+                nam = Properties._get_name(p)
                 if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
                     owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
                         owners.append(po.owner)
+
+            # get owners for thralls with default names
+            for p in session.query(Properties).filter(info_filter).all():
+                nam = Properties._get_name(p, names)
+                n = nam if nam else "None"
+                if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
+                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
+                    po = session.query(Properties).filter(owner_filter).first()
+                    if po:
+                        owners.append(po.owner)
+
         elif object_id:
             owner_filter = (Properties.object_id==object_id) & (Properties.name.like("%OwnerUniqueID%"))
             p = session.query(Properties).filter(owner_filter).first()
@@ -756,13 +818,8 @@ class Properties(GameBase):
         return False
 
     @property
-    def thrall_name(self):
-        if "PetName" in self.name or "ThrallName" in self.name:
-            try:
-                nam = self.value[21:-1].decode("utf-8")
-            except:
-                nam = self.value[21:-2].decode("utf-16")
-            return name
+    def thrall_name(self, names=None):
+        return self._get_name(self, names)
 
     @property
     def owner_id(self):

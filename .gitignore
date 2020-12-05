@@ -133,6 +133,7 @@ dmypy.json
 
 # oauth secret
 *.json
+!TemplateTableSpawn.json
 
 # log folder
 logs/
