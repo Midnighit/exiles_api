@@ -232,11 +232,10 @@ class PropertiesList(tuple):
     def name(self):
         for p in self:
             if "PetName" in p.name or "ThrallName" in p.name:
-                try:
-                    nam = p.value[21:-1].decode("utf-8")
-                except:
-                    nam = p.value[21:-2].decode("utf-16")
-                return nam
+                return Properties._get_name(p)
+        for p in self:
+            if "ThrallInfo" in p.name:
+                return Properties._get_name(p)
         return None
 
     @property
@@ -756,7 +755,6 @@ class Properties(GameBase):
 
             for p in session.query(Properties).filter(info_filter).all():
                 nam = Properties._get_name(p, names)
-                n = nam if nam else "None"
                 if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
                     objects.append(p.object_id)
 
@@ -769,15 +767,15 @@ class Properties(GameBase):
 
     @staticmethod
     def get_thrall_owners(name=None, object_id=None, strict=False):
-        owners = []
+        owners = {}
         if name:
             names = {}
             # read class <=> name link from json if available
             if os.path.isfile('TemplateTableSpawn.json'):
                 with open('TemplateTableSpawn.json') as json_file:
                     spawns = json.load(json_file)
-                for template in spawns:
-                    names[template['RowName']] = eval(template['Name'][9:])[2]
+                    for template in spawns:
+                        names[template['RowName']] = eval(template['Name'][9:])[2]
 
             # thralls with custom names
             name_filter = (Properties.name.like("%PetName")) | (Properties.name.like("%ThrallName"))
@@ -792,7 +790,7 @@ class Properties(GameBase):
                     owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
-                        owners.append(po.owner)
+                        owners[nam] = {"owner": po.owner, "object_id": p.object_id}
 
             # get owners for thralls with default names
             for p in session.query(Properties).filter(info_filter).all():
@@ -802,13 +800,13 @@ class Properties(GameBase):
                     owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
-                        owners.append(po.owner)
+                        owners[nam] = {"owner": po.owner, "object_id": p.object_id}
 
         elif object_id:
-            owner_filter = (Properties.object_id==object_id) & (Properties.name.like("%OwnerUniqueID%"))
-            p = session.query(Properties).filter(owner_filter).first()
-            if p:
-                owners.append(p.owner)
+            pl = PropertiesList(session.query(Properties).filter_by(object_id=object_id).all())
+            nam = pl.name
+            if nam:
+                owners[nam] = {"owner": pl.owner, "object_id": object_id}
         return owners
 
     @property
