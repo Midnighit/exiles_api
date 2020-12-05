@@ -766,7 +766,7 @@ class Properties(GameBase):
         return objects
 
     @staticmethod
-    def get_thrall_owners(name=None, object_id=None, strict=False):
+    def get_thrall_owners(name=None, object_id=None, owner_id=None, strict=False):
         owners = {}
         if name:
             names = {}
@@ -802,11 +802,24 @@ class Properties(GameBase):
                     if po:
                         owners[nam] = {"owner": po.owner, "object_id": p.object_id}
 
+        elif owner_id:
+            owner = session.query(Guilds).filter_by(id=owner_id).first()
+            if not owner:
+                owner = session.query(Characters).filter_by(id=owner_id).first()
+            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
+                own_id = unpack("<Q", p.value[-8:])[0]
+                if owner_id == own_id:
+                    pl = PropertiesList(session.query(Properties).filter_by(object_id=p.object_id).all())
+                    nam = pl.name
+                    if nam:
+                        owners[nam] = {"owner": owner, "object_id": p.object_id}
+
         elif object_id:
             pl = PropertiesList(session.query(Properties).filter_by(object_id=object_id).all())
             nam = pl.name
             if nam:
                 owners[nam] = {"owner": pl.owner, "object_id": object_id}
+
         return owners
 
     @property
