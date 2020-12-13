@@ -1,7 +1,7 @@
 import os, json
 from config import *
-from math import ceil, sqrt
-from struct import unpack
+from math import floor, ceil, sqrt
+from struct import pack, unpack
 from datetime import datetime
 from sqlalchemy import create_engine, literal, desc, MetaData
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
@@ -79,6 +79,21 @@ class ChatLogs:
         pass
 
 class Owner:
+    @staticmethod
+    def exists(owner_id):
+        ids = session.query(Characters.id).filter_by(id=owner_id).union(
+              session.query(Guilds.id).filter_by(id=owner_id)).all()
+        if len(ids) > 0:
+            return True
+        return False
+
+    @staticmethod
+    def get(owner_id):
+        owner = session.query(Guilds).get(owner_id)
+        if not owner:
+            owner = session.query(Characters).get(owner_id)
+        return owner
+
     @property
     def buildings(self):
         return session.query(Buildings).filter_by(owner_id=self.id).all()
@@ -137,17 +152,17 @@ class Tiles:
         return None
 
     @staticmethod
-    def remove(objects, autocommit=True):
-        if not isinstance(objects, (dict, list, set, tuple)):
-            objects = (objects,)
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(Buildings).filter(Buildings.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
+    def remove(object_ids, autocommit=True):
+        if not isinstance(object_ids, (dict, list, set, tuple)):
+            object_ids = (object_ids,)
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Buildings).filter(Buildings.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
@@ -172,14 +187,14 @@ class Thralls:
         return None
 
     @staticmethod
-    def remove(objects, autocommit=True):
-        if not isinstance(objects, (dict, list, set, tuple)):
-            objects = (objects,)
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(objects)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(objects)).delete(synchronize_session='fetch')
+    def remove(object_ids, autocommit=True):
+        if not isinstance(object_ids, (dict, list, set, tuple)):
+            object_ids = (object_ids,)
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
@@ -243,10 +258,7 @@ class PropertiesList(tuple):
         id = self.owner_id
         if id is None:
             return None
-        result = session.query(Guilds).filter_by(id=id).first()
-        if not result:
-            result = session.query(Characters).filter_by(id=id).first()
-        return result
+        return Owner.get(id)
 
 class TilesManager:
     @classmethod
@@ -486,6 +498,70 @@ class Buildings(GameBase):
         guild = session.query(Guilds).filter_by(id=self.owner_id).first()
         return guild
 
+    @staticmethod
+    def give_to_owner(old_owner_id, new_owner_id, loc=None, autocommit=True):
+        if loc is not None:
+            try:
+                if len(loc) == 2:
+                    x = loc[0]
+                    y = loc[1]
+                    filter = ((ActorPosition.id == Buildings.object_id) &
+                              (Building.owner_id == owner_id) &
+                              (ActorPosition.x.between(x[0], x[1])) &
+                              (ActorPosition.y.between(y[0], y[1])))
+                else:
+                    x = loc[0]
+                    y = loc[1]
+                    z = loc[2]
+                    filter = ((ActorPosition.id == Buildings.object_id) &
+                              (Building.owner_id == owner_id) &
+                              (ActorPosition.x.between(x[0], x[1])) &
+                              (ActorPosition.y.between(y[0], y[1])) &
+                              (ActorPosition.z.between(z[0], z[1])))
+            except:
+                return None
+        else:
+            filter = (Buildings.owner_id == owner_id)
+        session.query(Buildings).filter(filter).update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    @staticmethod
+    def remove_by_owner(owner_id, loc=None, autocommit=True):
+        if loc is not None:
+            try:
+                if len(loc) == 2:
+                    x, y = loc
+                    filter = ((ActorPosition.id == Buildings.object_id) &
+                              (Building.owner_id == owner_id) &
+                              (ActorPosition.x.between(x[0], x[1])) &
+                              (ActorPosition.y.between(y[0], y[1])))
+                elif len(loc) == 3:
+                    x, y, z = loc
+                    filter = ((ActorPosition.id == Buildings.object_id) &
+                              (Building.owner_id == owner_id) &
+                              (ActorPosition.x.between(x[0], x[1])) &
+                              (ActorPosition.y.between(y[0], y[1])) &
+                              (ActorPosition.z.between(z[0], z[1])))
+                else:
+                    return None
+            except:
+                return None
+        else:
+            filter = (Buildings.owner_id == owner_id)
+
+        object_ids = session.query(Buildings.object_id).filter(filter)
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Buildings).filter_by(owner_id=owner_id).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
 
@@ -562,10 +638,10 @@ class Characters(GameBase, Owner):
         return users
 
     @staticmethod
-    def remove(characters, autocommit=True):
-        if not isinstance(characters, (dict, list, set, tuple)):
-            characters = (characters,)
-        for id in characters:
+    def remove(character_ids, autocommit=True):
+        if not isinstance(character_ids, (dict, list, set, tuple)):
+            character_ids = (character_ids,)
+        for id in character_ids:
             char = session.query(Characters).get(id)
             player_id = char.pure_player_id
             # if char is the last character in its guild also remove the guild
@@ -579,15 +655,33 @@ class Characters(GameBase, Owner):
                 if acc:
                     session.delete(acc)
 
-        session.query(ActorPosition).filter(ActorPosition.id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(characters)).delete(synchronize_session='fetch')
-        session.query(Purgescores).filter(Purgescores.purge_id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session='fetch')
         session.query(Characters).filter(Characters.id.in_(characters)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
+
+    @staticmethod
+    def move_to_guild(char_id, guild_id, autocommit=True):
+        char = session.query(Characters).get(char_id)
+        guild = session.query(Guild).get(guild_id)
+        if char and guild:
+            char.guild = guild
+            if autocommit:
+                session.commit()
+
+    @staticmethod
+    def set_last_login(char_id, date=datetime.utcnow(), autocommit=True):
+        ts = floor(date.timestamp())
+        char = session.query(Characters).get(char_id)
+        if char and ts:
+            char.last_login = ts
+            if autocommit:
+                session.commit()
 
     @property
     def user(self):
@@ -613,6 +707,10 @@ class Characters(GameBase, Owner):
     @property
     def last_login(self):
         return datetime.utcfromtimestamp(self._last_login)
+
+    @last_login.setter
+    def last_login(self, value):
+        self._last_login = value
 
     @property
     def has_guild(self):
@@ -681,6 +779,24 @@ class ItemInventory(GameBase):
 
     item_id = Column(Integer, primary_key=True, nullable=False)
     owner_id = Column(Integer, primary_key=True, nullable=False)
+
+    @staticmethod
+    def remove(template_ids=None, autocommit=True):
+        if not isinstance(template_ids, (dict, list, set, tuple)):
+            template_ids = (template_ids,)
+        session.query(ItemInventory).filter(ItemInventory.id.in_(template_ids)).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    @staticmethod
+    def copy_stats(template_id, owner_id, autocommit=True):
+        data = session.query(ItemInventory.data).filter_by(template_id=template_id, owner_id=owner_id).first()
+        if not data or not Owner.exists(owner_id):
+            return None
+        filter = ItemInventory.template_id == template_id
+        session.query(ItemInventory).filter(filter).update({ItemInventory.data: data}, synchronize_session='fetch')
+        if autocommit:
+            session.commit()
 
     def __repr__(self):
         return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id})>"
@@ -759,7 +875,7 @@ class Properties(GameBase):
                     objects.append(p.object_id)
 
         elif owner_id:
-            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
+            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID")).all():
                 own_id = unpack("<Q", p.value[-8:])[0]
                 if owner_id == own_id:
                     objects.append(p.object_id)
@@ -787,7 +903,7 @@ class Properties(GameBase):
             for p in session.query(Properties).filter(name_filter).all():
                 nam = Properties._get_name(p)
                 if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
-                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
+                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
                         owners[nam] = {"owner": po.owner, "object_id": p.object_id}
@@ -797,16 +913,14 @@ class Properties(GameBase):
                 nam = Properties._get_name(p, names)
                 n = nam if nam else "None"
                 if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
-                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID%"))
+                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
                         owners[nam] = {"owner": po.owner, "object_id": p.object_id}
 
         elif owner_id:
-            owner = session.query(Guilds).filter_by(id=owner_id).first()
-            if not owner:
-                owner = session.query(Characters).filter_by(id=owner_id).first()
-            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID%")).all():
+            owner = Owner.get(owner_id)
+            for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID")).all():
                 own_id = unpack("<Q", p.value[-8:])[0]
                 if owner_id == own_id:
                     pl = PropertiesList(session.query(Properties).filter_by(object_id=p.object_id).all())
@@ -821,6 +935,19 @@ class Properties(GameBase):
                 owners[nam] = {"owner": pl.owner, "object_id": object_id}
 
         return owners
+
+    @staticmethod
+    def give_thrall(object_id, owner_id, autocommit=True):
+        if object_id is None:
+            return None
+        filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
+        p = session.query(Properties).filter(filter).first()
+        o = Owner.exists(owner_id)
+        if not (p and o):
+            return None
+        p.owner_id = owner_id
+        if autocommit:
+            session.commit()
 
     @property
     def is_thrall(self):
@@ -838,15 +965,23 @@ class Properties(GameBase):
             return unpack("<Q", self.value[-8:])[0]
         return None
 
+    @owner_id.setter
+    def owner_id(self, value):
+        if "OwnerUniqueID" in self.name:
+            self.value = self.value[:-8] + pack("<Q", value)
+
     @property
     def owner(self):
         id = self.owner_id
         if id is None:
             return None
-        result = session.query(Guilds).filter_by(id=id).first()
-        if not result:
-            result = session.query(Characters).filter_by(id=id).first()
-        return result
+        return Owner.get(id)
+
+    @owner.setter
+    def owner(self, value):
+        if not isinstance(value, (Guilds, Characters)):
+            return None
+        self.owner_id = value.id
 
     def __repr__(self):
         return f"<Properties(object_id={self.object_id}, name='{self.name}')>"
