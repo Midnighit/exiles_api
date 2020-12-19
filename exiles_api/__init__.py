@@ -628,9 +628,6 @@ class Buildings(GameBase):
         else:
             stmt = f"SELECT object_id FROM buildings WHERE owner_id = {owner_id}"
 
-        if remove:
-            Buildings.remove_by_owner(owner_id, loc, autocommit)
-
         with engine.connect() as conn:
             object_ids = tuple(id for (id,) in conn.execute(stmt))
             filter = str(object_ids)
@@ -642,6 +639,10 @@ class Buildings(GameBase):
             properties = tuple(conn.execute(f"SELECT * FROM properties WHERE object_id IN {filter}"))
             actor_position = tuple(conn.execute(f"SELECT * FROM actor_position WHERE id IN {filter}"))
         engine.dispose()
+
+        if remove:
+            Buildings.remove_by_owner(owner_id, loc, autocommit)
+
         for c in buildable_health:
             session.add(BuildableHealth(**get_kwargs(BuildableHealth, c)))
         for c in building_instances:
