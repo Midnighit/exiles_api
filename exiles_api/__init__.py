@@ -763,7 +763,7 @@ class Characters(GameBase, Owner):
         session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session='fetch')
         session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Characters).filter(Characters.id.in_(characters)).delete(synchronize_session='fetch')
+        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
@@ -889,7 +889,7 @@ class ItemInventory(GameBase):
     def remove(template_ids=None, autocommit=True):
         if not isinstance(template_ids, (list, set, tuple)):
             template_ids = (template_ids,)
-        session.query(ItemInventory).filter(ItemInventory.id.in_(template_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.template_id.in_(template_ids)).delete(synchronize_session='fetch')
         if autocommit:
             session.commit()
 
