@@ -1,9 +1,9 @@
-import os, json
+import os, json, warnings
 from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
 from datetime import datetime
-from sqlalchemy import create_engine, literal, desc, MetaData
+from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean
@@ -660,7 +660,9 @@ class Buildings(GameBase):
         for id in object_ids:
             session.add(Buildings(object_id=id, owner_id=owner_id))
         if autocommit:
-            session.commit()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=sa_exc.SAWarning)
+                session.commit()
 
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
