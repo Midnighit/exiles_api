@@ -153,7 +153,7 @@ class Tiles:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        if not isinstance(object_ids, (dict, list, set, tuple)):
+        if not isinstance(object_ids, (list, set, tuple)):
             object_ids = (object_ids,)
         session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
@@ -188,7 +188,7 @@ class Thralls:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        if not isinstance(object_ids, (dict, list, set, tuple)):
+        if not isinstance(object_ids, (list, set, tuple)):
             object_ids = (object_ids,)
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
@@ -502,27 +502,36 @@ class Buildings(GameBase):
     def give_to_owner(old_owner_id, new_owner_id, loc=None, autocommit=True):
         if loc is not None:
             try:
-                if len(loc) == 2:
-                    x = loc[0]
-                    y = loc[1]
+                if not isinstance(loc, (list, set, tuple)):
+                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                    print("loc:", loc)
+                    return None
+                elif len(loc) == 2:
+                    x, y = loc
                     filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Building.owner_id == owner_id) &
+                              (Buildings.owner_id == old_owner_id) &
                               (ActorPosition.x.between(x[0], x[1])) &
                               (ActorPosition.y.between(y[0], y[1])))
-                else:
-                    x = loc[0]
-                    y = loc[1]
-                    z = loc[2]
+                elif len(loc) == 3:
+                    x, y, z = loc
                     filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Building.owner_id == owner_id) &
+                              (Buildings.owner_id == old_owner_id) &
                               (ActorPosition.x.between(x[0], x[1])) &
                               (ActorPosition.y.between(y[0], y[1])) &
                               (ActorPosition.z.between(z[0], z[1])))
+                else:
+                    return None
+                object_ids = session.query(Buildings.object_id).filter(filter)
+                session.query(Buildings).filter(Buildings.object_id.in_(object_ids)) \
+                       .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
             except:
+                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                print("loc:", loc)
                 return None
         else:
-            filter = (Buildings.owner_id == owner_id)
-        session.query(Buildings).filter(filter).update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
+            filter = (Buildings.owner_id == old_owner_id)
+            session.query(Buildings).filter(filter) \
+                   .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
         if autocommit:
             session.commit()
 
@@ -530,27 +539,35 @@ class Buildings(GameBase):
     def remove_by_owner(owner_id, loc=None, autocommit=True):
         if loc is not None:
             try:
-                if len(loc) == 2:
+                if not isinstance(loc, (list, set, tuple)):
+                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                    print("loc:", loc)
+                    return None
+                elif len(loc) == 2:
                     x, y = loc
                     filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Building.owner_id == owner_id) &
+                              (Buildings.owner_id == owner_id) &
                               (ActorPosition.x.between(x[0], x[1])) &
                               (ActorPosition.y.between(y[0], y[1])))
                 elif len(loc) == 3:
                     x, y, z = loc
                     filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Building.owner_id == owner_id) &
+                              (Buildings.owner_id == owner_id) &
                               (ActorPosition.x.between(x[0], x[1])) &
                               (ActorPosition.y.between(y[0], y[1])) &
                               (ActorPosition.z.between(z[0], z[1])))
                 else:
                     return None
             except:
+                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                print("loc:", loc)
                 return None
         else:
             filter = (Buildings.owner_id == owner_id)
 
         object_ids = session.query(Buildings.object_id).filter(filter)
+        if loc:
+            object_ids_temp = [o for (o,) in object_ids.all()]
         session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
@@ -558,7 +575,86 @@ class Buildings(GameBase):
         session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Buildings).filter_by(owner_id=owner_id).delete(synchronize_session='fetch')
+        if loc:
+            for object_id in object_ids_temp:
+                session.query(Buildings).filter_by(object_id=object_id).delete()
+        else:
+            session.query(Buildings).filter_by(owner_id=owner_id).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    @staticmethod
+    def restore_from_backup(owner_id, loc=None, remove=True, autocommit=True):
+        def get_kwargs(table, values):
+            kwargs = {}
+            idx = 0
+            for col in table.__table__.columns:
+                n = col.name if col.name != 'class' else 'class_'
+                kwargs[n] = values[idx]
+                idx += 1
+            return kwargs
+
+        try:
+            engine = create_engine(BACKUP_DB_URI, echo=ECHO)
+        except:
+            print(f"Couldn't open backup.db at {BACKUP_DB_URI}.")
+            return None
+
+        if loc is not None:
+            try:
+                stmt = ( "SELECT object_id "
+                         "FROM actor_position, buildings "
+                        f"WHERE owner_id = {owner_id} "
+                         "AND id = object_id ")
+                if not isinstance(loc, (list, set, tuple)):
+                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                    print("loc:", loc)
+                    return None
+                elif len(loc) == 2:
+                    x, y = loc
+                    stmt += (f"AND (x BETWEEN {x[0]} AND {x[1]}) "
+                             f"AND (y BETWEEN {y[0]} AND {y[1]})")
+                elif len(loc) == 3:
+                    x, y, z = loc
+                    stmt += (f"AND (x BETWEEN {x[0]} AND {x[1]}) "
+                             f"AND (y BETWEEN {y[0]} AND {y[1]}) "
+                             f"AND (z BETWEEN {z[0]} AND {z[1]})")
+                else:
+                    return None
+            except:
+                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+                print("loc:", loc)
+                return None
+        else:
+            stmt = f"SELECT object_id FROM buildings WHERE owner_id = {owner_id}"
+
+        with engine.connect() as conn:
+            object_ids = tuple(id for (id,) in conn.execute(stmt))
+            filter = str(object_ids)
+            buildable_health = tuple(conn.execute(f"SELECT * FROM buildable_health WHERE object_id IN {filter}"))
+            building_instances = tuple(conn.execute(f"SELECT * FROM building_instances WHERE object_id IN {filter}"))
+            destruction_history = tuple(conn.execute(f"SELECT * FROM destruction_history WHERE object_id IN {filter}"))
+            item_inventory = tuple(conn.execute(f"SELECT * FROM item_inventory WHERE owner_id IN {filter}"))
+            item_properties = tuple(conn.execute(f"SELECT * FROM item_properties WHERE owner_id IN {filter}"))
+            properties = tuple(conn.execute(f"SELECT * FROM properties WHERE object_id IN {filter}"))
+            actor_position = tuple(conn.execute(f"SELECT * FROM actor_position WHERE id IN {filter}"))
+        engine.dispose()
+        if remove:
+            Buildings.remove_by_owner(owner_id, loc, autocommit)
+        for c in buildable_health:
+            session.add(BuildableHealth(**get_kwargs(BuildableHealth, c)))
+        for c in building_instances:
+            session.add(BuildingInstances(**get_kwargs(BuildingInstances, c)))
+        for c in destruction_history:
+            session.add(DestructionHistory(**get_kwargs(DestructionHistory, c)))
+        for c in item_inventory:
+            session.add(ItemInventory(**get_kwargs(ItemInventory, c)))
+        for c in item_properties:
+            session.add(ItemProperties(**get_kwargs(ItemProperties, c)))
+        for c in properties:
+            session.add(Properties(**get_kwargs(Properties, c)))
+        for c in actor_position:
+            session.add(ActorPosition(**get_kwargs(ActorPosition, c)))
         if autocommit:
             session.commit()
 
@@ -639,7 +735,7 @@ class Characters(GameBase, Owner):
 
     @staticmethod
     def remove(character_ids, autocommit=True):
-        if not isinstance(character_ids, (dict, list, set, tuple)):
+        if not isinstance(character_ids, (list, set, tuple)):
             character_ids = (character_ids,)
         for id in character_ids:
             char = session.query(Characters).get(id)
@@ -668,15 +764,18 @@ class Characters(GameBase, Owner):
     @staticmethod
     def move_to_guild(char_id, guild_id, autocommit=True):
         char = session.query(Characters).get(char_id)
-        guild = session.query(Guild).get(guild_id)
+        guild = session.query(Guilds).get(guild_id)
         if char and guild:
             char.guild = guild
             if autocommit:
                 session.commit()
 
     @staticmethod
-    def set_last_login(char_id, date=datetime.utcnow(), autocommit=True):
-        ts = floor(date.timestamp())
+    def set_last_login(char_id, date=None, autocommit=True):
+        if not date:
+            ts = floor(datetime.utcnow().timestamp())
+        else:
+            ts = floor(date.timestamp())
         char = session.query(Characters).get(char_id)
         if char and ts:
             char.last_login = ts
@@ -782,7 +881,7 @@ class ItemInventory(GameBase):
 
     @staticmethod
     def remove(template_ids=None, autocommit=True):
-        if not isinstance(template_ids, (dict, list, set, tuple)):
+        if not isinstance(template_ids, (list, set, tuple)):
             template_ids = (template_ids,)
         session.query(ItemInventory).filter(ItemInventory.id.in_(template_ids)).delete(synchronize_session='fetch')
         if autocommit:
@@ -793,6 +892,7 @@ class ItemInventory(GameBase):
         data = session.query(ItemInventory.data).filter_by(template_id=template_id, owner_id=owner_id).first()
         if not data or not Owner.exists(owner_id):
             return None
+        data = data[0]
         filter = ItemInventory.template_id == template_id
         session.query(ItemInventory).filter(filter).update({ItemInventory.data: data}, synchronize_session='fetch')
         if autocommit:
