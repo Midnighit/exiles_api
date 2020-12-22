@@ -2,11 +2,11 @@ import os, json, warnings
 from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
-from datetime import datetime
+from datetime import datetime, date, timedelta, time
 from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean, Interval
 
 GameBase = declarative_base()
 UsersBase = declarative_base()
@@ -1415,6 +1415,86 @@ class MagicChars(UsersBase):
 
     def __repr__(self):
         return f"<MagicUsers(id={self.id}, name='{self.name}', mana={self.mana}, active='{self.active}')>"
+
+class Categories(UsersBase):
+    __tablename__ = 'categories'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    cmd = Column(String, nullable=False)
+    frequency = Column(Interval, default=timedelta(days=7))
+    start = Column(String, default=datetime.utcnow().strftime('%A') +' 00:00')
+    fee = Column(Integer, default=1)
+    verbosity = Column(Integer, default=1)
+    guild_pay = Column(Boolean, default=False)
+    output_channel = Column(String)
+    input_channel = Column(String)
+    alert_message = Column(String)
+    active = Column(Boolean, default=True)
+
+    @staticmethod
+    def _convert_to_daytime(value):
+        wd = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
+        now = datetime.utcnow()
+        try:
+            d, t = value.split()
+            d = d if d in wd else now.strftime('%A')
+            t = t.split(':')
+            hour = t[0] if int(t[0]) >= 0 and int(t[0]) < 24 else 0
+            minute = t[1] if int(t[1]) >= 0 and int(t[1]) < 60 else 0
+        except:
+            d = now.strftime('%A')
+            hour, minute = '00', '00'
+        return d + ' ' + hour.zfill(2) + ':' + minute.zfill(2)
+
+    def __init__(self, *args, **kwargs):
+        freq = {'daily': timedelta(days=1), 'weekly': timedelta(weeks=1), 'monthly': timedelta(weeks=4)}
+        if kwargs.get('frequency') and type(kwargs['frequency']) is str and kwargs['frequency'] in freq:
+            kwargs['frequency'] = freq[kwargs['frequency']]
+        kwargs['start'] = self._convert_to_daytime(kwargs['start'])
+        super().__init__(*args, **kwargs)
+
+    def __repr__(self):
+        return f"<Categories(id={self.id}, name='{self.name}', active={self.active})>"
+
+class CatUsers(UsersBase):
+    __tablename__ = 'cat_users'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    category_id = Column(Integer, ForeignKey('categories.id'))
+    name = Column(String, nullable=False)
+    balance = Column(Integer, default=0)
+    last_payment = Column(DateTime)
+    next_due = Column(DateTime)
+    active = Column(Boolean, default=True)
+    # relationship
+    category = relationship('Categories', backref="users", foreign_keys=[category_id])
+
+    @staticmethod
+    def _next_due(value):
+        weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
+        now = datetime.utcnow()
+        d, t = value.split()
+        hour, minute = t.split(':')
+        due_time = time(hour=int(hour), minute=int(minute))
+        today = datetime.combine(now, due_time)
+        days_ahead = (weekdays[d] - today.weekday()) % 7
+        if days_ahead == 0 and now.time() > due_time:
+            days_ahead = 7
+        return today + timedelta(days=days_ahead)
+
+    def __init__(self, *args, **kwargs):
+        cat = kwargs.get('category')
+        if not cat:
+            cat = session.query(Categories).get(kwargs['category_id'])
+        if not kwargs.get('next_due'):
+            kwargs['next_due'] = self._next_due(cat.start) if cat.start else datetime.utcnow()
+        super().__init__(*args, **kwargs)
+
+    def __repr__(self):
+        return f"<CatUsers(id={self.id}, name='{self.name}', balance={self.balance}, active={self.active})>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
