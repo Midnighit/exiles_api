@@ -1463,7 +1463,7 @@ class CatUsers(UsersBase):
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    category_id = Column(Integer, ForeignKey('categories.id'))
+    category_id = Column(Integer, ForeignKey('categories.id'), primary_key=True)
     name = Column(String, nullable=False)
     balance = Column(Integer, default=0)
     last_payment = Column(DateTime)
