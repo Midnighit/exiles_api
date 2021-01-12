@@ -3,9 +3,9 @@ from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
 from datetime import datetime, date, timedelta, time
-from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, literal, desc, MetaData, Table, exc as sa_exc
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean, Interval
 
 GameBase = declarative_base()
@@ -931,14 +931,15 @@ class Properties(GameBase):
 
     @staticmethod
     def _get_name(p, names=None):
+        print(p)
         # if thrall name has been changed by the player it's stored in a row with PetName or ThrallName as name
-        if "PetName" in p.name or "ThrallName" in p.name:
+        if ("PetName" in p.name or "ThrallName" in p.name) and len(p.value) >= 21:
             # the codec type (negative = utf-16, positive = utf-8) and string length are in bytes 17-21
             type = unpack("l", p.value[17:21])[0]
             res = (21 + type - 1, "utf-8") if type > 0 else (21 + (abs(type) - 1) * 2, "utf-16")
             return p.value[21:res[0]].decode(res[1])
         # if thrall still has default game name it has to be derived from the TemplateTableSpawn.json
-        elif "ThrallInfo" in p.name and (names or os.path.isfile('TemplateTableSpawn.json')):
+        elif "ThrallInfo" in p.name and (names or os.path.isfile('TemplateTableSpawn.json')) and len(p.value) >= 13:
             end = 12 + unpack("l", p.value[8:12])[0] - 1
             thrall_class = p.value[12:end].decode("utf-8")
             if not names:
@@ -1008,7 +1009,7 @@ class Properties(GameBase):
             # get owners for thralls with custom names
             for p in session.query(Properties).filter(name_filter).all():
                 nam = Properties._get_name(p)
-                if (strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower()):
+                if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
                     owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
@@ -1431,7 +1432,8 @@ class Categories(UsersBase):
     output_channel = Column(String)
     input_channel = Column(String)
     alert_message = Column(String)
-    active = Column(Boolean, default=True)
+    # relationship
+    owners = relationship("CatOwners", back_populates="category")
 
     @staticmethod
     def _convert_to_daytime(value):
@@ -1452,25 +1454,25 @@ class Categories(UsersBase):
         freq = {'daily': timedelta(days=1), 'weekly': timedelta(weeks=1), 'monthly': timedelta(weeks=4)}
         if kwargs.get('frequency') and type(kwargs['frequency']) is str and kwargs['frequency'] in freq:
             kwargs['frequency'] = freq[kwargs['frequency']]
-        kwargs['start'] = self._convert_to_daytime(kwargs['start'])
+        kwargs['start'] = self._convert_to_daytime(kwargs.get('start'))
         super().__init__(*args, **kwargs)
 
     def __repr__(self):
-        return f"<Categories(id={self.id}, name='{self.name}', active={self.active})>"
+        return f"<Categories(id={self.id}, name='{self.name}' cmd='{self.cmd}')>"
 
-class CatUsers(UsersBase):
-    __tablename__ = 'cat_users'
+class CatOwners(UsersBase):
+    __tablename__ = 'cat_owners'
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
     category_id = Column(Integer, ForeignKey('categories.id'), primary_key=True)
-    name = Column(String, nullable=False)
+    group_id = Column(Integer, ForeignKey('groups.id'))
     balance = Column(Integer, default=0)
     last_payment = Column(DateTime)
     next_due = Column(DateTime)
-    active = Column(Boolean, default=True)
     # relationship
-    category = relationship('Categories', backref="users", foreign_keys=[category_id])
+    group = relationship("Groups", back_populates="owners")
+    category = relationship("Categories", back_populates="owners")
 
     @staticmethod
     def _next_due(value):
@@ -1486,15 +1488,45 @@ class CatUsers(UsersBase):
         return today + timedelta(days=days_ahead)
 
     def __init__(self, *args, **kwargs):
-        cat = kwargs.get('category')
-        if not cat:
-            cat = session.query(Categories).get(kwargs['category_id'])
         if not kwargs.get('next_due'):
+            cat = kwargs.get('category', session.query(Categories).get(kwargs['category_id']))
             kwargs['next_due'] = self._next_due(cat.start) if cat.start else datetime.utcnow()
         super().__init__(*args, **kwargs)
 
+    @staticmethod
+    def get(name, category_id=None):
+        ids = [id for id, in session.query(Characters.id).filter(Characters.name.collate('NOCASE') == name).union(
+                             session.query(Guilds.id).filter(Guilds.name.collate('NOCASE') == name)).all()]
+        if not ids:
+            return None
+        cat_owners = []
+        if category_id is not None:
+            filter = CatOwners.id.in_(ids) & (CatOwners.category_id == category_id)
+            cat_owners = [co for co in session.query(CatOwners).filter(filter).all()]
+        else:
+            cat_owners = [co for co in session.query(CatOwners).filter(CatOwners.id.in_(ids)).all()]
+        return cat_owners
+
+    @property
+    def name(self):
+        name = session.query(Characters.name).filter_by(id=self.id).union(
+               session.query(Guilds.name).filter_by(id=self.id)).first()
+        return name[0] if name else None
+
     def __repr__(self):
-        return f"<CatUsers(id={self.id}, name='{self.name}', balance={self.balance}, active={self.active})>"
+        return f"<CatOwners(id={self.id}, category_id={self.category_id}, group_id={self.group_id})>"
+
+class Groups(UsersBase):
+    __tablename__ = 'groups'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    # relationship
+    owners = relationship("CatOwners", back_populates="group")
+
+    def __repr__(self):
+        return f"<Groups(id={self.id}, name='{self.name}')>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
