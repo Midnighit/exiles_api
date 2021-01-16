@@ -1525,6 +1525,12 @@ class Groups(UsersBase):
     # relationship
     owners = relationship("CatOwners", back_populates="group")
 
+    @property
+    def category(self):
+        if len(self.owners) > 0:
+            return self.owners[0].category
+        return None
+
     def __repr__(self):
         return f"<Groups(id={self.id}, name='{self.name}')>"
 
