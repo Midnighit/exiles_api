@@ -94,6 +94,18 @@ class Owner:
             owner = session.query(Characters).get(owner_id)
         return owner
 
+    @staticmethod
+    def get_by_name(owner_name, strict=True):
+        if strict:
+            guilds = session.query(Guilds).filter_by(name=owner_name).all()
+        else:
+            guilds = session.query(Guilds).filter(Guilds.name.like('%' + owner_name + '%')).all()
+        if strict:
+            chars = session.query(Characters).filter_by(name=owner_name).all()
+        else:
+            chars = session.query(Characters).filter(Characters.name.like('%' + owner_name + '%')).all()
+        return chars + guilds
+
     @property
     def buildings(self):
         return session.query(Buildings).filter_by(owner_id=self.id).all()
