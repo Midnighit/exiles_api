@@ -95,13 +95,17 @@ class Owner:
         return owner
 
     @staticmethod
-    def get_by_name(owner_name, strict=True):
-        if strict:
+    def get_by_name(owner_name, strict=True, nocase=False):
+        if strict and not nocase:
             guilds = session.query(Guilds).filter_by(name=owner_name).all()
+        elif strict and nocase:
+            guilds = session.query(Guilds).filter(Guilds.name.collate('NOCASE') == owner_name).all()
         else:
             guilds = session.query(Guilds).filter(Guilds.name.like('%' + owner_name + '%')).all()
-        if strict:
+        if strict and not nocase:
             chars = session.query(Characters).filter_by(name=owner_name).all()
+        elif strict and nocase:
+            chars = session.query(Characters).filter(Characters.name.collate('NOCASE') == owner_name).all()
         else:
             chars = session.query(Characters).filter(Characters.name.like('%' + owner_name + '%')).all()
         return chars + guilds
