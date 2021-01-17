@@ -1489,7 +1489,7 @@ class CatOwners(UsersBase):
 
     def __init__(self, *args, **kwargs):
         if not kwargs.get('next_due'):
-            cat = kwargs.get('category', session.query(Categories).get(kwargs['category_id']))
+            cat = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
             kwargs['next_due'] = self._next_due(cat.start) if cat.start else datetime.utcnow()
         super().__init__(*args, **kwargs)
 
