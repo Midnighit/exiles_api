@@ -96,6 +96,7 @@ class Owner:
 
     @staticmethod
     def get_by_name(owner_name, strict=True, nocase=False, include_chars=True, include_guilds=True):
+        chars, guilds = [], []
         if include_guilds:
             if strict and not nocase:
                 guilds = session.query(Guilds).filter_by(name=owner_name).all()
