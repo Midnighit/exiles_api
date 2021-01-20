@@ -1569,7 +1569,7 @@ class CatOwners(UsersBase):
 
     @property
     def is_simple_group(self):
-        return True if self.group._name else False
+        return False if self.group._name else True
 
     def __repr__(self):
         return f"<CatOwners(id={self.id}, group_id={self.group_id})>"
@@ -1613,7 +1613,7 @@ class Groups(UsersBase):
 
     @property
     def is_simple(self):
-        return True if self._name else False
+        return False if self._name else True
 
 
     def __repr__(self):
