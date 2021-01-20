@@ -1568,7 +1568,7 @@ class CatOwners(UsersBase):
         self.group.last_payment = value
 
     @property
-    def is_in_group(self):
+    def is_simple_group(self):
         return True if self.group._name else False
 
     def __repr__(self):
@@ -1610,6 +1610,11 @@ class Groups(UsersBase):
     @name.setter
     def name(self, value):
         self._name = value
+
+    @property
+    def is_simple(self):
+        return True if self._name else False
+
 
     def __repr__(self):
         return f"<Groups(id={self.id}, name='{self.name}')>"
