@@ -4,6 +4,7 @@ from math import floor, ceil, sqrt
 from struct import pack, unpack
 from datetime import datetime, date, timedelta, time
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine, literal, desc, MetaData, Table, exc as sa_exc
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean, Interval
@@ -39,6 +40,18 @@ def db_date():
         if c.last_login < now:
             return c.last_login
     return None
+
+def next_time(value):
+    weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
+    now = datetime.utcnow()
+    d, t = value.split()
+    hour, minute = t.split(':')
+    due_time = time(hour=int(hour), minute=int(minute))
+    today = datetime.combine(now, due_time)
+    days_ahead = (weekdays[d] - today.weekday()) % 7
+    if days_ahead == 0 and now.time() > due_time:
+        days_ahead = 7
+    return today + timedelta(days=days_ahead)
 
 # non-db classes
 class ChatLogs:
@@ -1452,7 +1465,7 @@ class Categories(UsersBase):
     input_channel = Column(String)
     alert_message = Column(String)
     # relationship
-    owners = relationship("CatOwners", back_populates="category")
+    groups = relationship("Groups", back_populates="category")
 
     @staticmethod
     def _convert_to_daytime(value):
@@ -1484,33 +1497,23 @@ class CatOwners(UsersBase):
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    category_id = Column(Integer, ForeignKey('categories.id'), primary_key=True)
-    group_id = Column(Integer, ForeignKey('groups.id'))
-    balance = Column(Integer, default=0)
-    last_payment = Column(DateTime)
-    next_due = Column(DateTime)
+    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False)
     # relationship
     group = relationship("Groups", back_populates="owners")
-    category = relationship("Categories", back_populates="owners")
-
-    @staticmethod
-    def _next_due(value):
-        weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
-        now = datetime.utcnow()
-        d, t = value.split()
-        hour, minute = t.split(':')
-        due_time = time(hour=int(hour), minute=int(minute))
-        today = datetime.combine(now, due_time)
-        days_ahead = (weekdays[d] - today.weekday()) % 7
-        if days_ahead == 0 and now.time() > due_time:
-            days_ahead = 7
-        return today + timedelta(days=days_ahead)
 
     def __init__(self, *args, **kwargs):
-        if not kwargs.get('next_due'):
-            cat = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
-            kwargs['next_due'] = self._next_due(cat.start) if cat.start else datetime.utcnow()
-        super().__init__(*args, **kwargs)
+        if not ('group' in kwargs or 'group_id' in kwargs) and not ('category' in kwargs or 'category_id' in kwargs):
+            raise SQLAlchemyError("Initialization requires either a group or a category.")
+        elif not ('group' in kwargs or 'group_id' in kwargs):
+            if not 'next_due' in kwargs:
+                cat = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
+                kwargs['next_due'] = next_time(cat.start) if cat and cat.start else datetime.utcnow()
+            kwargs['group'] = Groups(name=kwargs.get('name'), next_due=kwargs['next_due'], category=cat)
+        _kwargs = {}
+        for key, arg in kwargs.items():
+            if key in self.__mapper__.attrs.keys():
+                _kwargs[key] = arg
+        super().__init__(*args, **_kwargs)
 
     @staticmethod
     def get(name, category_id=None):
@@ -1527,28 +1530,86 @@ class CatOwners(UsersBase):
         return cat_owners
 
     @property
+    def category(self):
+        return self.group.category
+
+    @property
     def name(self):
         name = session.query(Characters.name).filter_by(id=self.id).union(
                session.query(Guilds.name).filter_by(id=self.id)).first()
         return name[0] if name else None
 
+    @name.setter
+    def name(self, value):
+        self.group.name = value
+
+    @property
+    def balance(self):
+        return self.group.balance
+
+    @balance.setter
+    def balance(self, value):
+        self.group.balance = value
+
+    @property
+    def next_due(self):
+        return self.group.next_due
+
+    @next_due.setter
+    def next_due(self, value):
+        self.group.next_due = value
+
+    @property
+    def last_payment(self):
+        return self.group.last_payment
+
+    @last_payment.setter
+    def last_payment(self, value):
+        self.group.last_payment = value
+
+    @property
+    def is_in_group(self):
+        return True if self.group._name else False
+
     def __repr__(self):
-        return f"<CatOwners(id={self.id}, category_id={self.category_id}, group_id={self.group_id})>"
+        return f"<CatOwners(id={self.id}, group_id={self.group_id})>"
 
 class Groups(UsersBase):
     __tablename__ = 'groups'
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id'))
+    _name = Column("name", String)
+    balance = Column(Integer, default=0)
+    last_payment = Column(DateTime)
+    next_due = Column(DateTime)
     # relationship
     owners = relationship("CatOwners", back_populates="group")
+    category = relationship("Categories", back_populates="groups")
+
+    def __init__(self, *args, **kwargs):
+        if not 'next_due' in kwargs:
+            cat = kwargs.get('category')
+            if not cat:
+                cat = session.query(Categories).get(kwargs['category_id'])
+            kwargs['next_due'] = next_time(cat.start) if cat and cat.start else datetime.utcnow()
+        super().__init__(*args, **kwargs)
 
     @property
-    def category(self):
-        if len(self.owners) > 0:
-            return self.owners[0].category
+    def name(self):
+        if self._name:
+            return self._name
+        elif len(self.owners) >= 1:
+            id = self.owners[0].id
+            name = session.query(Characters.name).filter_by(id=id).union(
+                   session.query(Guilds.name).filter_by(id=id)).first()
+            return name[0] if name else None
         return None
+
+    @name.setter
+    def name(self, value):
+        self._name = value
 
     def __repr__(self):
         return f"<Groups(id={self.id}, name='{self.name}')>"
