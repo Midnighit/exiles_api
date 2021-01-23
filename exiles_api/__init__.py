@@ -1497,7 +1497,7 @@ class CatOwners(UsersBase):
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False)
+    group_id = Column(Integer, ForeignKey('groups.id'), primary_key=True, nullable=False)
     # relationship
     group = relationship("Groups", back_populates="owners")
 
