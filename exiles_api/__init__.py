@@ -963,7 +963,6 @@ class Properties(GameBase):
 
     @staticmethod
     def _get_name(p, names=None):
-        print(p)
         # if thrall name has been changed by the player it's stored in a row with PetName or ThrallName as name
         if ("PetName" in p.name or "ThrallName" in p.name) and len(p.value) >= 21:
             # the codec type (negative = utf-16, positive = utf-8) and string length are in bytes 17-21
