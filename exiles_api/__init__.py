@@ -1618,5 +1618,15 @@ class Groups(UsersBase):
     def __repr__(self):
         return f"<Groups(id={self.id}, name='{self.name}')>"
 
+class Boatbucks(UsersBase):
+    __tablename__ = 'boatbucks'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True)
+    bucks = Column(Integer, default=0)
+
+    def __repr__(self):
+        return f"<MagicUsers(id={self.id}, name={self.bucks})>"
+
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
