@@ -568,6 +568,24 @@ class Buildings(GameBase):
             session.commit()
 
     @staticmethod
+    def keep_by_owner(owner_id, autocommit=True):
+        if isinstance(owner_id, (list, set, tuple)):
+            filter = (Buildings.owner_id.notin_(owner_id))
+        else:
+            filter = (Buildings.owner_id != owner_id)
+        object_ids = session.query(Buildings.object_id).filter(filter)
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
+        session.query(Buildings).filter(filter).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    @staticmethod
     def remove_by_owner(owner_id, loc=None, autocommit=True):
         if loc is not None:
             try:
