@@ -59,6 +59,7 @@ class ChatLogs:
 
     def __init__(self, path, after_date=None):
         self.path = path
+        self.after_date = after_date
         filelist = os.listdir(path)
         filelist.sort()
         for filename in filelist:
@@ -68,28 +69,57 @@ class ChatLogs:
                     if not after_date or date > after_date:
                         self.files.append({'name': filename, 'date': date})
                 else:
-                    self.files.insert(0, {'name': filename, 'date': None})
+                    date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(path, filename)))
+                    if not after_date or date > after_date:
+                        self.files.insert(0, {'name': filename, 'date': date})
 
-    def lines(self, index):
-        if type(index) is int and index <= len(self.files) - 1:
-            filename = self.files[index]['name']
-        elif type(index) is str and index.startswith('ConanSandbox'):
-            for i in range(len(self.files)):
-                if files[i]['name'] == index:
-                    filename = index
-                    index = i
-                    break
+    def get_lines(self, after_date=None):
+        self.chat_lines = []
+        if not after_date:
+            after_date = self.after_date
+        # iterate through files from oldest to newest
+        for file in sorted(self.files, key=lambda item: item['date']):
+            # disregard any file that's older than the after_date
+            if not after_date or file['date'] > after_date:
+                print(f"parsing {file['name']}")
+                filename = os.path.join(self.path, file['name'])
+                with open(filename, 'r', encoding='utf-8-sig') as f:
+                    lines = f.readlines()
+                for line in lines:
+                    if line and line[0] == '[':
+                        date = self.get_date(line)
+                        if after_date and date > after_date and '[Pippi]PippiChat: ' in line:
+                            self.chat_lines.append(line)
+
+    @staticmethod
+    def get_date(line):
+        return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
+
+    @staticmethod
+    def get_chat_info(line):
+        """
+        Example Chat
+        [2000.01.01-12.00.00:000][Pippi]PippiChat: Alice said in channel [Alice:Bob]: Hello Bob!
+                                                   ^div_1                          ^div_2
+        """
+        if not '[Pippi]PippiChat: ' in line:
+            return (None, None, None, None, None)
+        div_1 = 43
+        div_2 = line.find(']', div_1)
+        date = self.get_date(line):
+        sender, channel = line[div_1:div_2].split(" said in channel [")
+        if ':' in channel:
+            sender, recipient = channel.split(':')
+            channel = 'whisper'
         else:
-            print("file not found.")
-            return False
-        file = os.path.join(self.path, filename)
-        with open(file, 'r') as f:
-            lines = f.readlines()
-        self.files[index]['lines'] = lines
-        return True
-
-    def chat_lines(self, file=None):
-        pass
+            recipient = ''
+        chat = line[div_2+3:-1]
+        if '"' in chat:
+            chat = chat.replace('"', "'")
+        for c in ';\n\r':
+            if c in chat:
+                chat = chat.replace(c, '')
+        return (date, sender, recipient, channel, chat)
 
 class Owner:
     @staticmethod
