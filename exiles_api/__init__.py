@@ -95,7 +95,7 @@ class ChatLogs:
         return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
 
     @staticmethod
-    def get_chat_info(line):
+    def get_chat_info(line, date_format=None):
         """
         Example Chat
         [2000.01.01-12.00.00:000][Pippi]PippiChat: Alice said in channel [Alice:Bob]: Hello Bob!
@@ -114,14 +114,17 @@ class ChatLogs:
             recipient = channel
             channel = 'Guild'
         else:
-            recipien = ''
+            recipient = ''
         chat = line[div_2+3:-1]
         if '"' in chat:
             chat = chat.replace('"', "'")
         for c in ';\n\r':
             if c in chat:
                 chat = chat.replace(c, '')
-        return (date, sender, recipient, channel, chat)
+        if date_format:
+            return (date.strftime(date_format), sender, recipient, channel, chat)
+        else:
+            return (date, sender, recipient, channel, chat)
 
 class Owner:
     @staticmethod
