@@ -81,7 +81,6 @@ class ChatLogs:
         for file in sorted(self.files, key=lambda item: item['date']):
             # disregard any file that's older than the after_date
             if not after_date or file['date'] > after_date:
-                print(f"parsing {file['name']}")
                 filename = os.path.join(self.path, file['name'])
                 with open(filename, 'r', encoding='utf-8-sig') as f:
                     lines = f.readlines()
@@ -106,7 +105,7 @@ class ChatLogs:
             return (None, None, None, None, None)
         div_1 = 43
         div_2 = line.find(']', div_1)
-        date = self.get_date(line)
+        date = ChatLogs.get_date(line)
         sender, channel = line[div_1:div_2].split(" said in channel [")
         if ':' in channel:
             sender, recipient = channel.split(':')
