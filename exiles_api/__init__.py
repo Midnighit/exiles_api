@@ -110,8 +110,11 @@ class ChatLogs:
         if ':' in channel:
             sender, recipient = channel.split(':')
             channel = 'whisper'
+        elif channel not in ('Global', 'Local'):
+            recipient = channel
+            channel = 'Guild'
         else:
-            recipient = ''
+            recipien = ''
         chat = line[div_2+3:-1]
         if '"' in chat:
             chat = chat.replace('"', "'")
