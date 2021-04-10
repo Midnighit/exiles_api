@@ -106,7 +106,7 @@ class ChatLogs:
             return (None, None, None, None, None)
         div_1 = 43
         div_2 = line.find(']', div_1)
-        date = self.get_date(line):
+        date = self.get_date(line)
         sender, channel = line[div_1:div_2].split(" said in channel [")
         if ':' in channel:
             sender, recipient = channel.split(':')
