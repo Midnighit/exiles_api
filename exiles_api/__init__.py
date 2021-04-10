@@ -59,7 +59,8 @@ class ChatLogs:
 
     def __init__(self, path, after_date=None):
         self.path = path
-        self.after_date = after_date
+        # add one second to account for lost split seconds in the log
+        self.after_date = after_date + timedelta(seconds=1) if after_date else None
         filelist = os.listdir(path)
         filelist.sort()
         for filename in filelist:
@@ -75,8 +76,7 @@ class ChatLogs:
 
     def get_lines(self, after_date=None):
         self.chat_lines = []
-        if not after_date:
-            after_date = self.after_date
+        after_date = after_date + timedelta(seconds=1) if after_date else self.after_date
         # iterate through files from oldest to newest
         for file in sorted(self.files, key=lambda item: item['date']):
             # disregard any file that's older than the after_date
@@ -109,7 +109,7 @@ class ChatLogs:
         sender, channel = line[div_1:div_2].split(" said in channel [")
         if ':' in channel:
             sender, recipient = channel.split(':')
-            channel = 'whisper'
+            channel = 'Whisper'
         elif channel not in ('Global', 'Local'):
             recipient = channel
             channel = 'Guild'
