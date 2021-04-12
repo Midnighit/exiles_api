@@ -2,6 +2,7 @@ import os, json, warnings
 from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
+from time import sleep
 from datetime import datetime, date, timedelta, time
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.exc import SQLAlchemyError
@@ -55,14 +56,13 @@ def next_time(value):
 
 # non-db classes
 class ChatLogs:
-    files = []
-
     def __init__(self, path, after_date=None):
         self.path = path
+        self.files, self.pippi = [], []
         # add one second to account for lost split seconds in the log
         self.after_date = after_date + timedelta(seconds=1) if after_date else None
         filelist = os.listdir(path)
-        filelist.sort()
+        filelist.sort(reverse=True)
         for filename in filelist:
             if filename.startswith('ConanSandbox'):
                 if filename.startswith('ConanSandbox-backup'):
@@ -73,26 +73,103 @@ class ChatLogs:
                     date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(path, filename)))
                     if not after_date or date > after_date:
                         self.files.insert(0, {'name': filename, 'date': date})
+            if filename.startswith('PippiCommands'):
+                if filename.startswith('PippiCommands-backup'):
+                    date = datetime.strptime(filename[21:40], '%Y.%m.%d-%H.%M.%S')
+                    if not after_date or date > after_date:
+                        self.pippi.append({'name': filename, 'date': date})
+                else:
+                    date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(path, filename)))
+                    if not after_date or date > after_date:
+                        self.pippi.insert(0, {'name': filename, 'date': date})
 
     def get_lines(self, after_date=None):
-        self.chat_lines = []
+        self.chat_lines, normal_lines, special_lines = [], [], []
         after_date = after_date + timedelta(seconds=1) if after_date else self.after_date
         # iterate through files from oldest to newest
         for file in sorted(self.files, key=lambda item: item['date']):
-            # disregard any file that's older than the after_date
             if not after_date or file['date'] > after_date:
                 filename = os.path.join(self.path, file['name'])
                 with open(filename, 'r', encoding='utf-8-sig') as f:
                     lines = f.readlines()
-                for line in lines:
-                    if line and line[0] == '[':
+                for line in lines[:-1]:
+                    if line[0] == '[':
                         date = self.get_date(line)
-                        if after_date and date > after_date and '[Pippi]PippiChat: ' in line:
-                            self.chat_lines.append(line)
+                        if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
+                            normal_lines.append(line)
+
+        for file in sorted(self.pippi, key=lambda item: item['date']):
+            if not after_date or file['date'] > after_date:
+                filename = os.path.join(self.path, file['name'])
+                with open(filename, 'r', encoding='utf-8-sig') as f:
+                    lines = f.readlines()
+                for line in lines[:-1]:
+                    date = self.get_date(line)
+                    if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
+                        special_lines.append(line)
+
+        # merge normal and special lines keeping the temporal order intact
+        normal_date = self.get_date(normal_lines[0]) if len(normal_lines) > 0 else None
+        special_date = self.get_date(special_lines[0]) if len(special_lines) > 0 else None
+        while True:
+            # if either of the two list are empty append the other to the result and break out of the loop
+            if len(normal_lines) == 0:
+                self.chat_lines += special_lines
+                break
+            elif len(special_lines) == 0:
+                self.chat_lines += normal_lines
+                break
+            # compare both dates, append the older one to the merge list and update it for the next comparison
+            if normal_date <= special_date:
+                self.chat_lines.append(normal_lines.pop(0))
+                normal_date = self.get_date(normal_lines[0]) if len(normal_lines) > 0 else None
+            else:
+                self.chat_lines.append(special_lines.pop(0))
+                special_date = self.get_date(special_lines[0]) if len(special_lines) > 0 else None
+
+    def cycle_pippi(self, keep_files=3):
+        while len(self.pippi) >= keep_files:
+            oldest_file = self.pippi[-1]
+            path = os.path.join(self.path, oldest_file['name'])
+            counter = 1
+            while True:
+                try:
+                    os.remove(path)
+                    del self.pippi[-1]
+                    break
+                except Exception as exc:
+                    print(f"Failed attempt {counter} to delete {path}.\n{str(exc)}\nTrying again in 1 second.")
+                    if counter < 5:
+                        counter += 1
+                        sleep(1)
+                    else:
+                        return False
+
+        # if the script reaches this point there should be only keep_files - 1 files left
+        # rename the youngest one (without a date in its filename) to -backup-date
+        src_path = os.path.join(self.path, 'PippiCommands.log')
+        date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime('%Y.%m.%d-%H.%M.%S')
+        dst_path = src_path[:-4] + '-backup-' + date + '.log'
+        while True:
+            try:
+                os.rename(src_path, dst_path)
+                self.pippi[0]['name'] = 'PippiCommands-backup-' + date + '.log'
+                break
+            except Exception as exc:
+                print(f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\nTrying again in 1 second.")
+                if counter < 5:
+                    counter += 1
+                    sleep(1)
+                else:
+                    return False
+        return True
 
     @staticmethod
     def get_date(line):
-        return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
+        try:
+            return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
+        except:
+            return None
 
     @staticmethod
     def get_chat_info(line, date_format=None):
@@ -110,7 +187,7 @@ class ChatLogs:
         if ':' in channel:
             sender, recipient = channel.split(':')
             channel = 'Whisper'
-        elif channel not in ('Global', 'Local'):
+        elif channel not in ('Global', 'Local', 'Emote', 'Shout', 'Mumble'):
             recipient = channel
             channel = 'Guild'
         else:
