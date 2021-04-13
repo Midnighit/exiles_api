@@ -104,9 +104,10 @@ class ChatLogs:
                 with open(filename, 'r', encoding='utf-8-sig') as f:
                     lines = f.readlines()
                 for line in lines[:-1]:
-                    date = self.get_date(line)
-                    if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
-                        special_lines.append(line)
+                    if line[0] == '[':
+                        date = self.get_date(line)
+                        if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
+                            special_lines.append(line)
 
         # merge normal and special lines keeping the temporal order intact
         normal_date = self.get_date(normal_lines[0]) if len(normal_lines) > 0 else None
@@ -148,12 +149,12 @@ class ChatLogs:
         # if the script reaches this point there should be only keep_files - 1 files left
         # rename the youngest one (without a date in its filename) to -backup-date
         src_path = os.path.join(self.path, 'PippiCommands.log')
-        date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime('%Y.%m.%d-%H.%M.%S')
-        dst_path = src_path[:-4] + '-backup-' + date + '.log'
+        last_edit = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime('%Y.%m.%d-%H.%M.%S')
+        dst_path = src_path[:-4] + '-backup-' + last_edit + '.log'
         while True:
             try:
                 os.rename(src_path, dst_path)
-                self.pippi[0]['name'] = 'PippiCommands-backup-' + date + '.log'
+                self.pippi[0]['name'] = 'PippiCommands-backup-' + last_edit + '.log'
                 break
             except Exception as exc:
                 print(f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\nTrying again in 1 second.")
@@ -162,6 +163,24 @@ class ChatLogs:
                     sleep(1)
                 else:
                     return False
+        # append a log file closed line to the newly backuped log
+        now = datetime.utcnow()
+        log_date_fmt1 = now.strftime('%m/%d/%y %H:%M:%S')
+        log_date_fmt2 = now.strftime('%Y.%m.%d-%H.%M.%S:%f')[:-3]
+        try:
+            with open(dst_path, 'a', encoding='utf-8-sig') as f:
+                f.write(f"[{log_date_fmt2}]Log file closed, {log_date_fmt1}\n")
+        except Exception as exc:
+            print(f"Failed to edit PippiCommands.log-backup-{last_edit}.log'.\n{str(exc)}")
+            return False
+
+        try:
+            with open(src_path, 'a', encoding='utf-8-sig') as f:
+                f.write(f"Log file open, {log_date_fmt1}\n")
+        except Exception as exc:
+            print(f"Failed to create PippiCommands.log.\n{str(exc)}")
+            return False
+
         return True
 
     @staticmethod
