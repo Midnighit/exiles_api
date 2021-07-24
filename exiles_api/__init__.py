@@ -1179,6 +1179,8 @@ class Properties(GameBase):
                     spawns = json.load(json_file)
                     for template in spawns:
                         names[template['RowName']] = eval(template['Name'][9:])[2]
+            # add DLC default names manually (as they come up)
+            names['Horse_Knight_RoH_Black'] = 'Black Horse'
 
             # thralls with custom names
             name_filter = (Properties.name.like("%PetName")) | (Properties.name.like("%ThrallName"))
