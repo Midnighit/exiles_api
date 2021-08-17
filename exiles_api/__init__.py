@@ -1226,15 +1226,18 @@ class Properties(GameBase):
         return owners
 
     @staticmethod
-    def give_thrall(object_id, owner_id, autocommit=True):
-        if object_id is None:
+    def give_thrall(object_ids, owner_id, autocommit=True):
+        if object_ids is None:
             return None
-        filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
-        p = session.query(Properties).filter(filter).first()
-        o = Owner.exists(owner_id)
-        if not (p and o):
-            return None
-        p.owner_id = owner_id
+        if not isinstance(object_ids, (list, set, tuple)):
+            object_ids = (object_ids,)
+        for object_id in object_ids:
+            filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
+            p = session.query(Properties).filter(filter).first()
+            o = Owner.exists(owner_id)
+            if not (p and o):
+                return None
+            p.owner_id = owner_id
         if autocommit:
             session.commit()
 
