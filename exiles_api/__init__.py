@@ -730,18 +730,18 @@ class Stats:
         s['numTilesRuinCharsGuild'] = sum(tiles_ruin_chars_guild.values())
         s['numRuins'] = len(ruins)
         s['numTilesRuins'] = sum(tiles_ruins.values())
-        s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values())
-        s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values())
-        s['meanTilesInactiveGuilds'] = mean(tiles_inactive_guilds.values())
-        s['medianTilesInactiveGuilds'] = median(tiles_inactive_guilds.values())
-        s['meanTilesActiveCharsNoGuild'] = mean(tiles_active_chars_no_guild.values())
-        s['medianTilesActiveCharsNoGuild'] = median(tiles_active_chars_no_guild.values())
-        s['meanTilesInactiveCharsNoGuild'] = mean(tiles_inactive_chars_no_guild.values())
-        s['medianTilesInactiveCharsNoGuild'] = median(tiles_inactive_chars_no_guild.values())
-        s['meanTilesActiveChars'] = mean(tiles_active_chars.values())
-        s['medianTilesActiveChars'] = median(tiles_active_chars.values())
-        s['meanTilesInactiveChars'] = mean(tiles_inactive_chars.values())
-        s['medianTilesInactiveChars'] = median(tiles_inactive_chars.values())
+        s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values()) if tiles_active_guilds else None
+        s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values()) if tiles_active_guilds else None
+        s['meanTilesInactiveGuilds'] = mean(tiles_inactive_guilds.values()) if tiles_inactive_guilds else None
+        s['medianTilesInactiveGuilds'] = median(tiles_inactive_guilds.values()) if tiles_inactive_guilds else None
+        s['meanTilesActiveCharsNoGuild'] = mean(tiles_active_chars_no_guild.values()) if tiles_active_chars_no_guild else None
+        s['medianTilesActiveCharsNoGuild'] = median(tiles_active_chars_no_guild.values()) if tiles_active_chars_no_guild else None
+        s['meanTilesInactiveCharsNoGuild'] = mean(tiles_inactive_chars_no_guild.values()) if tiles_inactive_chars_no_guild else None
+        s['medianTilesInactiveCharsNoGuild'] = median(tiles_inactive_chars_no_guild.values()) if tiles_inactive_chars_no_guild else None
+        s['meanTilesActiveChars'] = mean(tiles_active_chars.values()) if tiles_active_chars else None
+        s['medianTilesActiveChars'] = median(tiles_active_chars.values()) if tiles_active_chars else None
+        s['meanTilesInactiveChars'] = mean(tiles_inactive_chars.values()) if tiles_inactive_chars else None
+        s['medianTilesInactiveChars'] = median(tiles_inactive_chars.values()) if tiles_inactive_chars else None
         return s
 
 # game.db
