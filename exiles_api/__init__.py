@@ -1,4 +1,5 @@
 import os, json, warnings
+from statistics import median, mean
 from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
@@ -424,8 +425,8 @@ class PropertiesList(tuple):
         return Owner.get(id)
 
 class TilesManager:
-    @classmethod
-    def get_tiles_by_owner(cls, bMult=1, pMult=1, do_round=True):
+    @staticmethod
+    def get_tiles_by_owner(bMult=1, pMult=1, do_round=True):
         # stores all tiles indexed by their respective owners
         tiles = {}
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
@@ -529,42 +530,219 @@ class TilesManager:
 
 class MembersManager:
     @staticmethod
-    def _get_guilds_query(threshold):
-        C = Characters
-        G = Guilds
-        subquery1 = session.query(C.guild_id).filter(C.guild_id != None)
-        empty_guilds = session.query(G.id, G.name, literal(0).label("members"), literal(0).label("last_login")).filter(G.id.notin_(subquery1))
-        subquery2 = session.query(Buildings.owner_id).subquery()
-        query = C.guild_id, G.name, func.count(C.guild_id), C._last_login
-        filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id, C.guild_id.in_(subquery2)
-        populated_guilds = session.query(*query).filter(*filter).group_by(C.guild_id)
-        return empty_guilds.union(populated_guilds)
+    def _get_guilds_query(threshold, only_with_buildings=True):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=sa_exc.SAWarning)
+            C = Characters
+            G = Guilds
+            subquery1 = session.query(C.guild_id).filter(C.guild_id != None).subquery()
+            subquery2 = session.query(Buildings.owner_id).subquery()
+            query = G.id, G.name, literal(0).label("members"), literal(0).label("last_login")
+            filter = G.id.notin_(subquery1), G.id.in_(subquery2) if only_with_buildings else G.id.notin_(subquery1),
+            empty_guilds = session.query(*query).filter(*filter)
+            query = C.guild_id, G.name, func.count(C.guild_id), C._last_login
+            if only_with_buildings:
+                filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id, C.guild_id.in_(subquery2)
+            else:
+                filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id
+            populated_guilds = session.query(*query).filter(*filter).group_by(C.guild_id)
+            return empty_guilds.union(populated_guilds)
 
     @staticmethod
-    def _get_chars_query():
-        subquery = session.query(Buildings.owner_id).subquery()
-        return session.query(Characters.id, Characters.name, Characters._last_login) \
-                      .filter(Characters.id.in_(subquery))
+    def _get_chars_query(only_with_buildings=True):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=sa_exc.SAWarning)
+            if only_with_buildings:
+                subquery = session.query(Buildings.owner_id).subquery()
+                return session.query(Characters.id, Characters.name, Characters._last_login). \
+                               filter(Characters.id.in_(subquery))
+            else:
+                return session.query(Characters.id, Characters.name, Characters._last_login).filter_by(guild_id=None)
 
     @classmethod
-    def get_members(cls, td=None):
+    def get_members(cls, td=None, d=datetime.utcnow(), buildings=True):
         members = {}
-        threshold = int((datetime.utcnow() - td).timestamp()) if td is not None else 0
+        threshold = int((d - td).timestamp()) if td is not None else 0
         owners = set()
-        for g in cls._get_guilds_query(0).all():
+        for g in cls._get_guilds_query(0, buildings).all():
             owners.add(g[0])
             members[g[0]] = {'name': g[1], 'numMembers': g[2], 'numActiveMembers': g[2]}
-        for c in cls._get_chars_query().all():
+        for c in cls._get_chars_query(buildings).all():
             numActiveMembers = 1 if c[2] >= threshold else 0
             members[c[0]] = {'name': c[1], 'numMembers': 1, 'numActiveMembers': numActiveMembers}
         if td is None:
             return members
-        for g in cls._get_guilds_query(threshold):
+        for g in cls._get_guilds_query(threshold, buildings):
             owners.remove(g[0])
             members[g[0]]['numActiveMembers'] = g[2]
         for g in owners:
             members[g]['numActiveMembers'] = 0
         return members
+
+class Stats:
+    @staticmethod
+    def get_tile_statistics(td=timedelta(days=0), d = None, full=False):
+        # timestamp threshold is set based on the the timedelta given and the age of the db
+        if not d:
+            d = db_date()
+        threshold = 0 if not td else int((d - td).timestamp())
+        C = Characters
+        G = Guilds
+        members = MembersManager.get_members(td, d, False)
+        # stores all tiles indexed by their respective owners
+        building_tiles, placeables, tiles = {}, {}, {}
+        # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
+        root = set()
+        # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated objects
+        for res in session.query(Buildings.object_id, Buildings.owner_id, func.count(Buildings.object_id)) \
+                          .filter(Buildings.object_id==BuildingInstances.object_id) \
+                          .group_by(Buildings.object_id).all():
+            # create a new dict entry if owner does not have one yet
+            if not res[1] in tiles:
+                tiles[res[1]] = res[2]
+                building_tiles[res[1]] = res[2]
+            # add aggregated tiles if one already exists
+            else:
+                tiles[res[1]] += res[2]
+                building_tiles[res[1]] += res[2]
+            # remember the object_id as root object in either case
+            root.add(res[0])
+
+        # res has format: (object_id, owner_id) contains all building tiles and placeables
+        for res in session.query(Buildings.object_id, Buildings.owner_id).filter(Buildings.object_id==ActorPosition.id).all():
+            # if object is not a root object, it is a placeable and needs to be added now
+            if not res[0] in root:
+                # create a new dict entry if owner does not have one yet
+                if not res[1] in placeables:
+                    placeables[res[1]] = 1
+                # otherwise add it to the count
+                else:
+                    placeables[res[1]] += 1
+                # same thing for the general tiles dict
+                if not res[1] in tiles:
+                    tiles[res[1]] = 1
+                else:
+                    tiles[res[1]] += 1
+
+        nm, nam = 'numMembers', 'numActiveMembers'
+
+        # active guilds with more than one member
+        active_guilds = dict(filter(lambda m: m[1][nm] > 1 and m[1][nam] >= 1, members.items()))
+        tiles_active_guilds = {id: tiles[id] if id in tiles else 0 for id in active_guilds}
+
+        # inactive guilds with more than one member
+        inactive_guilds = dict(filter(lambda m: m[1][nm] > 1 and m[1][nam] == 0, members.items()))
+        tiles_inactive_guilds = {id: tiles[id] if id in tiles else 0 for id in inactive_guilds}
+
+        # active characters without guilds or in guilds with one member only
+        active_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1][nam] == 1, members.items()))
+        tiles_active_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in active_chars_no_guild}
+
+        # inactive characters without guilds or in guilds with one member only
+        inactive_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1][nam] == 0, members.items()))
+        tiles_inactive_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in inactive_chars_no_guild}
+
+        # active characters regardless of guild status
+        active_chars = dict(filter(lambda m: m[1][nam] >= 1, members.items()))
+        tiles_active_chars = {id: tiles[id] if id in tiles else 0 for id in active_chars}
+
+        # inactive characters regardless of guild status
+        inactive_chars = {id: 1 for id, in session.query(C.id).filter(C._last_login<=threshold).all()}
+        tiles_inactive_chars = {id: tiles[id] if id in tiles else 0 for id in inactive_chars}
+
+        # single characters or guilds with one member named ruins
+        ruin_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1]['name'] == "Ruins", members.items()))
+        tiles_ruin_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in ruin_chars_no_guild}
+
+        # guilds with more than one member named ruins
+        ruin_chars_guild = dict(filter(lambda m: m[1][nm] > 1 and m[1]['name'] == "Ruins", members.items()))
+        tiles_ruin_chars_guild = {id: tiles[id] if id in tiles else 0 for id in ruin_chars_guild}
+
+        # ruins regardless of whether they're owned by a guild or a character
+        ruins = dict(filter(lambda m: m[1]['name'] == "Ruins", members.items()))
+        tiles_ruins = {id: tiles[id] if id in tiles else 0 for id in ruins}
+
+        # tiles that have no owner
+        tiles_no_owner = {id: tiles[id] for id in tiles if id not in members}
+        threshold24h = (d - timedelta(hours=24)).timestamp()
+
+        # session.query(func.count(C.id)).filter(C.name=="Ruins").scalar() + session.query(func.count(G.id)).filter(G.name=="Ruins").scalar()
+
+        # set statistics list
+        s = {}
+        # iterables
+        if full:
+            s['tiles'] = tiles
+            s['buildingTiles'] = building_tiles
+            s['placeables'] = placeables
+            s['allChars'] = members
+            s['activeGuilds'] = active_guilds
+            s['tilesActiveGuilds'] = tiles_active_guilds
+            s['inactiveGuilds'] = inactive_guilds
+            s['tilesInactiveGuilds'] = tiles_inactive_guilds
+            s['activeCharsNoGuild'] = active_chars_no_guild
+            s['tilesActiveCharsNoGuild'] = tiles_active_chars_no_guild
+            s['inactiveCharsNoGuilds'] = inactive_chars_no_guild
+            s['tilesInactiveCharsNoGuild'] = tiles_inactive_chars_no_guild
+            s['ruinCharsNoGuild'] = ruin_chars_no_guild
+            s['tilesRuinCharsNoGuild'] = tiles_ruin_chars_no_guild
+            s['ruinCharsGuild'] = ruin_chars_guild
+            s['tilesRuinCharsGuild'] = tiles_ruin_chars_guild
+            s['ruins'] = ruins
+            s['tilesRuins'] = tiles_ruins
+            s['activeChars'] = active_chars
+            s['tilesActiveChars'] = tiles_active_chars
+            s['inactiveChars'] = inactive_chars
+            s['tilesInactiveChars'] = tiles_inactive_chars
+            s['tilesNoOwner'] = tiles_no_owner
+            s['logins'] = session.query(C).filter(C._last_login>=threshold24h).all()
+        # numbers
+        s['dbDate'] = d
+        s['numTiles'] = sum(building_tiles.values()) + sum(placeables.values())
+        s['numBuildingTiles'] = sum(building_tiles.values())
+        s['numPlaceables'] = sum(placeables.values())
+        s['numActiveGuilds'] = len(active_guilds)
+        s['numActiveCharsInActiveGuilds'] = sum([d[nam] for d in active_guilds.values()])
+        s['numInactiveCharsInActiveGuilds'] = sum([d[nm] - d[nam] for d in active_guilds.values()])
+        s['numCharsInActiveGuilds'] = s['numActiveCharsInActiveGuilds'] + s['numInactiveCharsInActiveGuilds']
+        s['numTilesActiveGuilds'] = sum(tiles_active_guilds.values())
+        s['numInactiveGuilds'] = len(inactive_guilds)
+        s['numCharsInInactiveGuilds'] = sum([d[nm] for d in inactive_guilds.values()])
+        s['numTilesInactiveGuilds'] = sum(tiles_inactive_guilds.values())
+        s['numGuilds'] = s['numActiveGuilds'] + s['numInactiveGuilds']
+        s['numTilesGuilds'] = s['numTilesActiveGuilds'] + s['numTilesInactiveGuilds']
+        s['numActiveCharsNoGuild'] = len(active_chars_no_guild)
+        s['numTilesActiveCharsNoGuild'] = sum(tiles_active_chars_no_guild.values())
+        s['numInactiveCharsNoGuild'] = len(inactive_chars_no_guild)
+        s['numTilesInactiveCharsNoGuild'] = sum(tiles_inactive_chars_no_guild.values())
+        s['numCharsNoGuild'] = s['numActiveCharsNoGuild'] + s['numInactiveCharsNoGuild']
+        s['numTilesCharsNoGuild'] = s['numTilesActiveCharsNoGuild'] + s['numTilesInactiveCharsNoGuild']
+        s['numActiveChars'] = sum([d[nam] for d in active_chars.values()])
+        s['numTilesActiveChars'] = sum(tiles_active_chars.values())
+        s['numInactiveChars'] = len(inactive_chars)
+        s['numTilesInactiveChars'] = sum(tiles_inactive_chars.values())
+        s['numChars'] = s['numActiveChars'] + s['numInactiveChars']
+        s['numTilesNoOwner'] = sum(tiles_no_owner.values())
+        s['numLogins'] = session.query(func.count(C.id)).filter(C._last_login>=threshold24h).scalar()
+        s['numRuinCharsNoGuild'] = len(ruin_chars_no_guild)
+        s['numTilesRuinCharsNoGuild'] = sum(tiles_ruin_chars_no_guild.values())
+        s['numRuinCharsGuild'] = len(ruin_chars_guild)
+        s['numTilesRuinCharsGuild'] = sum(tiles_ruin_chars_guild.values())
+        s['numRuins'] = len(ruins)
+        s['numTilesRuins'] = sum(tiles_ruins.values())
+        s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values())
+        s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values())
+        s['meanTilesInactiveGuilds'] = mean(tiles_inactive_guilds.values())
+        s['medianTilesInactiveGuilds'] = median(tiles_inactive_guilds.values())
+        s['meanTilesActiveCharsNoGuild'] = mean(tiles_active_chars_no_guild.values())
+        s['medianTilesActiveCharsNoGuild'] = median(tiles_active_chars_no_guild.values())
+        s['meanTilesInactiveCharsNoGuild'] = mean(tiles_inactive_chars_no_guild.values())
+        s['medianTilesInactiveCharsNoGuild'] = median(tiles_inactive_chars_no_guild.values())
+        s['meanTilesActiveChars'] = mean(tiles_active_chars.values())
+        s['medianTilesActiveChars'] = median(tiles_active_chars.values())
+        s['meanTilesInactiveChars'] = mean(tiles_inactive_chars.values())
+        s['medianTilesInactiveChars'] = median(tiles_inactive_chars.values())
+        return s
 
 # game.db
 class Account(GameBase):
