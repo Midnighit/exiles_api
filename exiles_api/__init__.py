@@ -666,8 +666,6 @@ class Stats:
         tiles_no_owner = {id: tiles[id] for id in tiles if id not in members}
         threshold24h = (d - timedelta(hours=24)).timestamp()
 
-        # session.query(func.count(C.id)).filter(C.name=="Ruins").scalar() + session.query(func.count(G.id)).filter(G.name=="Ruins").scalar()
-
         # set statistics list
         s = {}
         # iterables
@@ -1958,7 +1956,7 @@ class Boatbucks(UsersBase):
     bucks = Column(Integer, default=0)
 
     def __repr__(self):
-        return f"<MagicUsers(id={self.id}, name={self.bucks})>"
+        return f"<Boatbucks(id={self.id}, bucks={self.bucks})>"
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
