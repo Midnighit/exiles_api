@@ -1134,16 +1134,35 @@ class Characters(GameBase, Owner):
                 session.commit()
 
     @staticmethod
-    def set_last_login(char_id, date=None, autocommit=True):
+    def give_thrall(object_ids, owner_id, autocommit=True):
+        if object_ids is None:
+            return None
+        if not isinstance(object_ids, (list, set, tuple)):
+            object_ids = (object_ids,)
+        for object_id in object_ids:
+            filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
+            p = session.query(Properties).filter(filter).first()
+            o = Owner.exists(owner_id)
+            if not (p and o):
+                return None
+            p.owner_id = owner_id
+        if autocommit:
+            session.commit()
+
+    @staticmethod
+    def set_last_login(char_ids, date=None, autocommit=True):
         if not date:
             ts = floor(datetime.utcnow().timestamp())
         else:
             ts = floor(date.timestamp())
-        char = session.query(Characters).get(char_id)
-        if char and ts:
-            char.last_login = ts
-            if autocommit:
-                session.commit()
+        if not isinstance(char_ids, (list, set, tuple)):
+            char_ids = (char_ids,)
+        for char_id in char_ids:
+            char = session.query(Characters).get(char_id)
+            if char and ts:
+                char.last_login = ts
+        if autocommit:
+            session.commit()
 
     @property
     def user(self):
