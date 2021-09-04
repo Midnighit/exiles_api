@@ -1057,11 +1057,11 @@ class Buildings(GameBase):
             session.commit()
 
     @staticmethod
-    def restore_from_backup(owner_id, loc=None, remove=True):
+    def restore_from_backup(owner_ids, loc=None, remove=True):
         # basically an alias for a specific utilisation of the copy method
         if remove:
-            Buildings.delete(owner_ids=owner_id)
-        Buildings.copy(owner_ids=owner_id, loc=loc)
+            Buildings.delete(owner_ids=owner_ids)
+        Buildings.copy(owner_ids=owner_ids, loc=loc)
 
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
@@ -1129,83 +1129,6 @@ class Characters(GameBase, Owner):
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
     _account = relationship("Account", uselist=False, back_populates="_character")
 
-    @staticmethod
-    def get_users(value):
-        results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
-        users = []
-        for char in results:
-            user = session.query(Users).filter_by(funcom_id=char.account.funcom_id).first()
-            users += [user] if user and not user in users else []
-        return users
-
-    @staticmethod
-    def remove(character_ids, autocommit=True):
-        if not isinstance(character_ids, ITER):
-            character_ids = (character_ids,)
-        for id in character_ids:
-            char = session.query(Characters).get(id)
-            player_id = char.pure_player_id
-            # if char is the last character in its guild also remove the guild
-            if char.guild and len(char.guild.members) == 1:
-                session.delete(char.guild)
-            filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id==player_id)
-            # if char is the last character with the given player_id also remove it from the account table
-            num = session.query(func.count(Characters.id)).filter(filter).order_by(Characters.id).scalar()
-            if num == 1:
-                acc = session.query(Account).filter_by(player_id=player_id).first()
-                if acc:
-                    session.delete(acc)
-
-        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session='fetch')
-        if autocommit:
-            session.commit()
-
-    @staticmethod
-    def move_to_guild(char_id, guild_id, autocommit=True):
-        char = session.query(Characters).get(char_id)
-        guild = session.query(Guilds).get(guild_id)
-        if char and guild:
-            char.guild = guild
-            if autocommit:
-                session.commit()
-
-    @staticmethod
-    def give_thrall(object_ids, owner_id, autocommit=True):
-        if object_ids is None:
-            return None
-        if not isinstance(object_ids, ITER):
-            object_ids = (object_ids,)
-        for object_id in object_ids:
-            filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
-            p = session.query(Properties).filter(filter).first()
-            o = Owner.exists(owner_id)
-            if not (p and o):
-                return None
-            p.owner_id = owner_id
-        if autocommit:
-            session.commit()
-
-    @staticmethod
-    def set_last_login(char_ids, date=None, autocommit=True):
-        if not date:
-            ts = floor(datetime.utcnow().timestamp())
-        else:
-            ts = floor(date.timestamp())
-        if not isinstance(char_ids, ITER):
-            char_ids = (char_ids,)
-        for char_id in char_ids:
-            char = session.query(Characters).get(char_id)
-            if char and ts:
-                char.last_login = ts
-        if autocommit:
-            session.commit()
-
     @property
     def user(self):
         return session.query(Users).filter_by(funcom_id=self.account.funcom_id).first()
@@ -1255,6 +1178,67 @@ class Characters(GameBase, Owner):
     @property
     def is_character(self):
         return True
+
+    @staticmethod
+    def get_users(value):
+        results = session.query(Characters).filter(Characters.name.like('%' + str(value) + '%')).all()
+        users = []
+        for char in results:
+            user = session.query(Users).filter_by(funcom_id=char.account.funcom_id).first()
+            users += [user] if user and not user in users else []
+        return users
+
+    @staticmethod
+    def remove(character_ids, autocommit=True):
+        if not isinstance(character_ids, ITER):
+            character_ids = (character_ids,)
+        for id in character_ids:
+            char = session.query(Characters).get(id)
+            player_id = char.pure_player_id
+            # if char is the last character in its guild also remove the guild
+            if char.guild and len(char.guild.members) == 1:
+                session.delete(char.guild)
+            filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id==player_id)
+            # if char is the last character with the given player_id also remove it from the account table
+            num = session.query(func.count(Characters.id)).filter(filter).order_by(Characters.id).scalar()
+            if num == 1:
+                acc = session.query(Account).filter_by(player_id=player_id).first()
+                if acc:
+                    session.delete(acc)
+
+        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session='fetch')
+        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session='fetch')
+        if autocommit:
+            session.commit()
+
+    @staticmethod
+    def move_to_guild(char_id, guild_id, autocommit=True):
+        char = session.query(Characters).get(char_id)
+        guild = session.query(Guilds).get(guild_id)
+        if char and guild:
+            char.guild = guild
+            if autocommit:
+                session.commit()
+
+    @staticmethod
+    def set_last_login(char_ids, date=None, autocommit=True):
+        if not date:
+            ts = floor(datetime.utcnow().timestamp())
+        else:
+            ts = floor(date.timestamp())
+        if not isinstance(char_ids, ITER):
+            char_ids = (char_ids,)
+        for char_id in char_ids:
+            char = session.query(Characters).get(char_id)
+            if char and ts:
+                char.last_login = ts
+        if autocommit:
+            session.commit()
 
     def __repr__(self):
         return f"<Characters(id={self.id}, name='{self.name}')>"
