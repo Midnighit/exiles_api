@@ -29,12 +29,9 @@ Session = sessionmaker(class_=RoutingSession)
 session = Session()
 GameBase.metadata = metadata
 
-RANKS = (
-    'Recruit',
-    'Member',
-    'Officer',
-    'Guildmaster'
-)
+RANKS = ('Recruit', 'Member', 'Officer', 'Guildmaster')
+ITER = (list, tuple)
+NUMBER = (int, float)
 
 def db_date():
     now = datetime.utcnow()
@@ -54,6 +51,14 @@ def next_time(value):
     if days_ahead == 0 and now.time() > due_time:
         days_ahead = 7
     return today + timedelta(days=days_ahead)
+
+def iter2str(value):
+    if not isinstance(value, ITER):
+        return value
+    if len(value) == 1 and isinstance(value, tuple):
+        return str(value)[1:-2]
+    else:
+        return str(value)[1:-1]
 
 # non-db classes
 class ChatLogs:
@@ -317,7 +322,7 @@ class Tiles:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        if not isinstance(object_ids, (list, set, tuple)):
+        if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
         session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
@@ -352,7 +357,7 @@ class Thralls:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        if not isinstance(object_ids, (list, set, tuple)):
+        if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session='fetch')
         session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
@@ -838,188 +843,225 @@ class Buildings(GameBase):
         return guild
 
     @staticmethod
-    def give_to_owner(old_owner_id, new_owner_id, loc=None, autocommit=True):
-        if loc is not None:
-            try:
-                if not isinstance(loc, (list, set, tuple)):
-                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                    print("loc:", loc)
-                    return None
-                elif len(loc) == 2:
-                    x, y = loc
-                    filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Buildings.owner_id == old_owner_id) &
-                              (ActorPosition.x.between(x[0], x[1])) &
-                              (ActorPosition.y.between(y[0], y[1])))
-                elif len(loc) == 3:
-                    x, y, z = loc
-                    filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Buildings.owner_id == old_owner_id) &
-                              (ActorPosition.x.between(x[0], x[1])) &
-                              (ActorPosition.y.between(y[0], y[1])) &
-                              (ActorPosition.z.between(z[0], z[1])))
-                else:
-                    return None
-                object_ids = session.query(Buildings.object_id).filter(filter)
-                session.query(Buildings).filter(Buildings.object_id.in_(object_ids)) \
-                       .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
-            except:
-                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                print("loc:", loc)
-                return None
-        else:
-            filter = (Buildings.owner_id == old_owner_id)
-            session.query(Buildings).filter(filter) \
-                   .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
-        if autocommit:
-            session.commit()
+    def _verify_loc(loc):
+        # no location info is correct in that it means no filter is applied
+        if loc is None:
+            return True
+        # checks if loc is a list or tuple and has either two (x and y) or three (x, y and z) elements
+        if not isinstance(loc, ITER) or len(loc) < 2 or len(loc) > 3:
+            return False
+        # check if each element contained in loc has exactly two (min and max) numbers
+        for c in loc:
+            if not isinstance(loc, ITER) or len(c) != 2 or not isinstance(c[0], NUMBER) or not isinstance(c[1], NUMBER):
+                return False
+            if  c[0] > c[1]:
+                return False
+        return True
 
     @staticmethod
-    def keep_by_owner(owner_id, autocommit=True):
-        if isinstance(owner_id, (list, set, tuple)):
-            filter = (Buildings.owner_id.notin_(owner_id))
-        else:
-            filter = (Buildings.owner_id != owner_id)
-        object_ids = session.query(Buildings.object_id).filter(filter)
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Buildings).filter(filter).delete(synchronize_session='fetch')
-        if autocommit:
-            session.commit()
-
-    @staticmethod
-    def remove_by_owner(owner_id, loc=None, autocommit=True):
-        if loc is not None:
-            try:
-                if not isinstance(loc, (list, set, tuple)):
-                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                    print("loc:", loc)
-                    return None
-                elif len(loc) == 2:
-                    x, y = loc
-                    filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Buildings.owner_id == owner_id) &
-                              (ActorPosition.x.between(x[0], x[1])) &
-                              (ActorPosition.y.between(y[0], y[1])))
-                elif len(loc) == 3:
-                    x, y, z = loc
-                    filter = ((ActorPosition.id == Buildings.object_id) &
-                              (Buildings.owner_id == owner_id) &
-                              (ActorPosition.x.between(x[0], x[1])) &
-                              (ActorPosition.y.between(y[0], y[1])) &
-                              (ActorPosition.z.between(z[0], z[1])))
-                else:
-                    return None
-            except:
-                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                print("loc:", loc)
-                return None
-        else:
-            filter = (Buildings.owner_id == owner_id)
-
-        object_ids = session.query(Buildings.object_id).filter(filter)
+    def _get_objects_query(owner_ids=None, loc=None, inverse=False, attach=None):
+        attach = attach + '.' if attach else ''
+        # The SELECT clause is always the same
+        query_list = ["SELECT object_id"]
+        # The FROM clause only has to include actor_position if a location was given
         if loc:
-            object_ids_temp = [o for (o,) in object_ids.all()]
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
-        if loc:
-            for object_id in object_ids_temp:
-                session.query(Buildings).filter_by(object_id=object_id).delete()
+            query_list.append(f"FROM {attach}actor_position, {attach}buildings")
         else:
-            session.query(Buildings).filter_by(owner_id=owner_id).delete(synchronize_session='fetch')
-        if autocommit:
-            session.commit()
+            query_list.append(f"FROM {attach}buildings")
+        # Create the WHERE clause depending on loc, owner_id and inverse
+        where_list = ["id = object_id"] if loc else []
+        if loc and len(loc) == 2:
+            x, y = loc
+            where_list.append(
+                f"x BETWEEN {x[0]} AND {x[1]} AND "
+                f"y BETWEEN {y[0]} AND {y[1]}"
+            )
+        elif loc and len(loc) == 3:
+            x, y, z = loc
+            where_list.append(
+                f"x BETWEEN {x[0]} AND {x[1]} AND "
+                f"y BETWEEN {y[0]} AND {y[1]} AND "
+                f"z BETWEEN {z[0]} AND {z[1]}"
+            )
+        if owner_ids:
+            o_ids = owner_ids if not isinstance(owner_ids, ITER) else iter2str(owner_ids)
+            if not inverse:
+                where_list.append(f"owner_id IN ({o_ids})")
+            else:
+                where_list.append(f"owner_id NOT IN ({o_ids})")
+        if len(where_list) > 0:
+            query_list.append("WHERE " + " AND ".join(where_list))
+        return ' '.join(query_list)
 
     @staticmethod
-    def restore_from_backup(owner_id, loc=None, remove=True, autocommit=True):
-        def get_kwargs(table, values):
-            kwargs = {}
-            idx = 0
-            for col in table.__table__.columns:
-                n = col.name if col.name != 'class' else 'class_'
-                kwargs[n] = values[idx]
-                idx += 1
-            return kwargs
+    def _get_objects_filter(owner_ids=None, loc=None, inverse=False):
+        owner_filter = None
+        if owner_ids:
+            print("owner_ids")
+            if not inverse:
+                print("not inverse")
+                if isinstance(owner_ids, int):
+                    print("int")
+                    owner_filter = (Buildings.owner_id == owner_ids)
+                    print(type(owner_filter))
+                    if owner_filter is not None:
+                        print("owner_filter is not None")
+                    else:
+                        print("owner_filter is None")
+                elif isinstance(owner_ids, ITER):
+                    print("iter")
+                    owner_filter = (Buildings.owner_id.in_(owner_ids))
+                else:
+                    print(type(owner_ids))
+            else:
+                if isinstance(owner_ids, int):
+                    owner_filter = (Buildings.owner_id != owner_ids)
+                elif isinstance(owner_ids, ITER):
+                    owner_filter = (Buildings.owner_id.notin_(owner_ids))
 
-        try:
-            engine = create_engine(BACKUP_DB_URI, echo=ECHO)
-        except:
-            print(f"Couldn't open backup.db at {BACKUP_DB_URI}.")
+        loc_filter = None
+        if loc:
+            if len(loc) == 2:
+                x, y = loc
+                loc_filter = (
+                    (ActorPosition.id == Buildings.object_id) &
+                    (ActorPosition.x.between(x[0], x[1])) &
+                    (ActorPosition.y.between(y[0], y[1]))
+                )
+            elif len(loc) == 3:
+                x, y, z = loc
+                loc_filter = (
+                    (ActorPosition.id == Buildings.object_id) &
+                    (ActorPosition.x.between(x[0], x[1])) &
+                    (ActorPosition.y.between(y[0], y[1])) &
+                    (ActorPosition.z.between(z[0], z[1]))
+                )
+
+        if owner_filter is not None and loc_filter is None:
+            print("1+0")
+            return owner_filter
+        elif owner_filter is None and loc_filter is not None:
+            print("0+1")
+            return loc_filter
+        elif owner_filter is not None and loc_filter is not None:
+            print("1+1")
+            return owner_filter & loc_filter
+        else:
+            print("0+0")
+            return ()
+
+    @staticmethod
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, loc=None, inverse=False):
+        # confirm that source and destination files exist
+        if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
+            print("Either source or destination DB file don't exist in saved folder.")
             return None
 
-        if loc is not None:
-            try:
-                stmt = ( "SELECT object_id "
-                         "FROM actor_position, buildings "
-                        f"WHERE owner_id = {owner_id} "
-                         "AND id = object_id ")
-                if not isinstance(loc, (list, set, tuple)):
-                    print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                    print("loc:", loc)
-                    return None
-                elif len(loc) == 2:
-                    x, y = loc
-                    stmt += (f"AND (x BETWEEN {x[0]} AND {x[1]}) "
-                             f"AND (y BETWEEN {y[0]} AND {y[1]})")
-                elif len(loc) == 3:
-                    x, y, z = loc
-                    stmt += (f"AND (x BETWEEN {x[0]} AND {x[1]}) "
-                             f"AND (y BETWEEN {y[0]} AND {y[1]}) "
-                             f"AND (z BETWEEN {z[0]} AND {z[1]})")
-                else:
-                    return None
-            except:
-                print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
-                print("loc:", loc)
-                return None
-        else:
-            stmt = f"SELECT object_id FROM buildings WHERE owner_id = {owner_id}"
+        # Try to get engine for the destination db
+        try:
+            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            engine = create_engine(dest_db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open destination DB at {dest_db_uri}.")
+            return None
 
-        with engine.connect() as conn:
-            object_ids = tuple(id for (id,) in conn.execute(stmt))
-            filter = str(object_ids)
-            buildable_health = tuple(conn.execute(f"SELECT * FROM buildable_health WHERE object_id IN {filter}"))
-            building_instances = tuple(conn.execute(f"SELECT * FROM building_instances WHERE object_id IN {filter}"))
-            destruction_history = tuple(conn.execute(f"SELECT * FROM destruction_history WHERE object_id IN {filter}"))
-            item_inventory = tuple(conn.execute(f"SELECT * FROM item_inventory WHERE owner_id IN {filter}"))
-            item_properties = tuple(conn.execute(f"SELECT * FROM item_properties WHERE owner_id IN {filter}"))
-            properties = tuple(conn.execute(f"SELECT * FROM properties WHERE object_id IN {filter}"))
-            actor_position = tuple(conn.execute(f"SELECT * FROM actor_position WHERE id IN {filter}"))
+        # Ensure that, if a location is given, it is in the correct format
+        if not Buildings._verify_loc(loc):
+            print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+            print("loc:", loc)
+            return None
+
+        # generate the apropriate query with the information given
+        obj_ids = Buildings._get_objects_query(owner_ids, loc, inverse, attach='src')
+
+        # do the actual copying
+        slf, wobi, wowi = "SELECT * FROM", "WHERE object_id IN", "WHERE owner_id IN"
+        source_db_path = SAVED_DIR_PATH + '/' + source_db
+        with engine.begin() as conn:
+            conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
+            # Delete conflicting objects in the destination db if they exist
+            conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids})")
+            conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids})")
+            conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids})")
+            conn.execute(f"DELETE FROM item_inventory {wowi} ({obj_ids})")
+            conn.execute(f"DELETE FROM item_properties {wowi} ({obj_ids})")
+            conn.execute(f"DELETE FROM properties {wobi} ({obj_ids})")
+            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM buildings {wobi} ({obj_ids})")
+            # copy the objects from the source db into the destination db
+            conn.execute(f"REPLACE INTO buildable_health {slf} src.buildable_health {wobi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO building_instances {slf} src.building_instances {wobi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO destruction_history {slf} src.destruction_history {wobi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {wowi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {wowi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position WHERE id IN ({obj_ids})")
+            conn.execute(f"REPLACE INTO buildings {slf} src.buildings {wobi} ({obj_ids})")
         engine.dispose()
 
-        if remove:
-            Buildings.remove_by_owner(owner_id, loc, autocommit)
+    @staticmethod
+    def delete(db="game.db", owner_ids=None, loc=None, inverse=False):
+        # confirm that source and destination files exist
+        if not os.path.isfile(SAVED_DIR_PATH + '/' + db):
+            print("DB file doesn't exist in saved folder.")
+            return None
 
-        for c in buildable_health:
-            session.add(BuildableHealth(**get_kwargs(BuildableHealth, c)))
-        for c in building_instances:
-            session.add(BuildingInstances(**get_kwargs(BuildingInstances, c)))
-        for c in destruction_history:
-            session.add(DestructionHistory(**get_kwargs(DestructionHistory, c)))
-        for c in item_inventory:
-            session.add(ItemInventory(**get_kwargs(ItemInventory, c)))
-        for c in item_properties:
-            session.add(ItemProperties(**get_kwargs(ItemProperties, c)))
-        for c in properties:
-            session.add(Properties(**get_kwargs(Properties, c)))
-        for c in actor_position:
-            session.add(ActorPosition(**get_kwargs(ActorPosition, c)))
-        for id in object_ids:
-            session.add(Buildings(object_id=id, owner_id=owner_id))
+        # Try to get engine for the db
+        try:
+            db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + db
+            engine = create_engine(db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open DB at {db_uri}.")
+            return None
+
+        # Ensure that, if a location is given, it is in the correct format
+        if not Buildings._verify_loc(loc):
+            print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+            print("loc:", loc)
+            return None
+
+        # generate the apropriate query with the information given
+        obj_ids = Buildings._get_objects_query(owner_ids, loc, inverse)
+
+        # do the actual deleting
+        with engine.begin() as conn:
+            conn.execute(f"DELETE FROM buildable_health WHERE object_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM building_instances WHERE object_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM destruction_history WHERE object_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM item_inventory WHERE owner_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM item_properties WHERE owner_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM properties WHERE object_id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM buildings WHERE object_id IN ({obj_ids})")
+        engine.dispose()
+
+    @staticmethod
+    def give_to_owner(old_owner_id, new_owner_id, loc=None, autocommit=True):
+
+        # Ensure that, if a location is given, it is in the correct format
+        if not Buildings._verify_loc(loc):
+            print("loc is in the wrong format. Needs to be ((x_min, x_max), (y_min, y_max), [(z_min, z_max)]).")
+            print("loc:", loc)
+            return None
+
+        filter = Buildings._get_objects_filter(owner_ids=old_owner_id, loc=loc)
+        if loc is not None:
+            obj_ids = session.query(Buildings.object_id).filter(filter).scalar_subquery()
+            session.query(Buildings).filter(Buildings.object_id.in_(obj_ids)) \
+                .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
+        else:
+            session.query(Buildings).filter(filter) \
+                .update({Buildings.owner_id: new_owner_id}, synchronize_session='fetch')
+
         if autocommit:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=sa_exc.SAWarning)
-                session.commit()
+            session.commit()
+
+    @staticmethod
+    def restore_from_backup(owner_id, loc=None, remove=True):
+        # basically an alias for a specific utilisation of the copy method
+        if remove:
+            Buildings.delete(owner_ids=owner_id)
+        Buildings.copy(owner_ids=owner_id, loc=loc)
 
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
@@ -1098,7 +1140,7 @@ class Characters(GameBase, Owner):
 
     @staticmethod
     def remove(character_ids, autocommit=True):
-        if not isinstance(character_ids, (list, set, tuple)):
+        if not isinstance(character_ids, ITER):
             character_ids = (character_ids,)
         for id in character_ids:
             char = session.query(Characters).get(id)
@@ -1137,7 +1179,7 @@ class Characters(GameBase, Owner):
     def give_thrall(object_ids, owner_id, autocommit=True):
         if object_ids is None:
             return None
-        if not isinstance(object_ids, (list, set, tuple)):
+        if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
         for object_id in object_ids:
             filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
@@ -1155,7 +1197,7 @@ class Characters(GameBase, Owner):
             ts = floor(datetime.utcnow().timestamp())
         else:
             ts = floor(date.timestamp())
-        if not isinstance(char_ids, (list, set, tuple)):
+        if not isinstance(char_ids, ITER):
             char_ids = (char_ids,)
         for char_id in char_ids:
             char = session.query(Characters).get(char_id)
@@ -1263,7 +1305,7 @@ class ItemInventory(GameBase):
 
     @staticmethod
     def remove(template_ids=None, autocommit=True):
-        if not isinstance(template_ids, (list, set, tuple)):
+        if not isinstance(template_ids, ITER):
             template_ids = (template_ids,)
         session.query(ItemInventory).filter(ItemInventory.template_id.in_(template_ids)).delete(synchronize_session='fetch')
         if autocommit:
@@ -1424,7 +1466,7 @@ class Properties(GameBase):
     def give_thrall(object_ids, owner_id, autocommit=True):
         if object_ids is None:
             return None
-        if not isinstance(object_ids, (list, set, tuple)):
+        if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
         for object_id in object_ids:
             filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
