@@ -40,6 +40,21 @@ def db_date():
             return c.last_login
     return None
 
+def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inverse_owners=False, loc=None, with_chars=True, inverse_mods=False, mod_names=None):
+    if owner_ids:
+        guild_ids = []
+        char_ids = []
+        for owner_id in owner_ids:
+            if session.query(Characters).get(owner_id):
+                char_ids.append(owner_id)
+            elif session.query(Guilds).get(owner_id):
+                guild_ids.append(owner_id)
+
+    Mods.copy(source_db, dest_db, mod_names, inverse_mods)
+    Buildings.copy(source_db, dest_db, owner_ids, loc, inverse_owners)
+    Guilds.copy(source_db, dest_db, guild_ids, with_chars, inverse_owners)
+    Characters.copy(source_db, dest_db, char_ids, inverse_owners)
+
 def next_time(value):
     weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
     now = datetime.utcnow()
@@ -584,6 +599,102 @@ class MembersManager:
             members[g]['numActiveMembers'] = 0
         return members
 
+class Mods:
+    @staticmethod
+    def copy(source_db="game.db", dest_db="dest.db", mod_names=None, inverse=False):
+        # confirm that source and destination files exist
+        if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
+            print("Either source or destination DB file don't exist in saved folder.")
+            return None
+
+        # Try to get engine for the destination db
+        try:
+            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            engine = create_engine(dest_db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open destination DB at {dest_db_uri}.")
+            return None
+
+        # if no mod_names were given, all mods are selected
+        if not mod_names or (not isinstance(mod_names, str) and not isinstance(mod_names, ITER)):
+            # if inverse is False, all mods are copied
+            if not inverse:
+                obj_ids = "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1"
+            # if inverse is True, no mods are copied
+            else:
+                return None
+        # if mod_names were given, those mods are selected
+        else:
+            # if inverse is False, exactly the given mods are copied
+            if not inverse:
+                mod_expr = f"= '{mod_names}'" if isinstance(mod_names, str) else f" IN ({iter2str(mod_names)})"
+            # if inverse is True, all mods except the ones selected are copied
+            else:
+                mod_expr = f"!= '{mod_names}'" if isinstance(mod_names, str) else f" NOT IN ({iter2str(mod_names)})"
+            obj_ids = (
+                 "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1 "
+                f"AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/') - 1) {mod_expr}"
+            )
+
+        slf, wobi, sif = "SELECT * FROM", "WHERE object_id IN", "SELECT id FROM"
+        source_db_path = SAVED_DIR_PATH + '/' + source_db
+        with engine.begin() as conn:
+            conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
+            # Delete conflicting objects in the destination db if they exist
+            conn.execute(f"DELETE FROM actor_position {obj_ids}")
+            conn.execute(f"DELETE FROM mod_controllers WHERE id IN (SELECT id FROM actor_position {obj_ids})")
+            conn.execute(f"DELETE FROM properties {wobi} ({sif} src.actor_position {obj_ids})")
+            # copy the objects from the source db into the destination db
+            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {obj_ids}")
+            conn.execute(f"REPLACE INTO mod_controllers {sif} src.actor_position {obj_ids}")
+            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({sif} src.actor_position {obj_ids})")
+        engine.dispose()
+
+    @staticmethod
+    def delete(db="game.db", mod_names=None, inverse=False):
+        # confirm that source and destination files exist
+        if not (os.path.isfile(SAVED_DIR_PATH + '/' + db)):
+            print("Either source or destination DB file don't exist in saved folder.")
+            return None
+
+        # Try to get engine for the destination db
+        try:
+            db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + db
+            engine = create_engine(db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open destination DB at {db_uri}.")
+            return None
+
+        # if no mod_names were given, all mods are selected
+        if not mod_names or (not isinstance(mod_names, str) and not isinstance(mod_names, ITER)):
+            # if inverse is False, all mods are copied
+            if not inverse:
+                obj_ids = "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1"
+            # if inverse is True, no mods are copied
+            else:
+                return None
+        # if mod_names were given, those mods are selected
+        else:
+            # if inverse is False, exactly the given mods are copied
+            if not inverse:
+                mod_expr = f"= '{mod_names}'" if isinstance(mod_names, str) else f" IN ({iter2str(mod_names)})"
+            # if inverse is True, all mods except the ones selected are copied
+            else:
+                mod_expr = f"!= '{mod_names}'" if isinstance(mod_names, str) else f" NOT IN ({iter2str(mod_names)})"
+            obj_ids = (
+                 "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1 "
+                f"AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/') - 1) {mod_expr}"
+            )
+
+        with engine.begin() as conn:
+            conn.execute(f"DELETE FROM properties WHERE object_id IN (SELECT id FROM actor_position {obj_ids})")
+            conn.execute(f"DELETE FROM mod_controllers WHERE id IN  (SELECT id FROM actor_position {obj_ids})")
+            conn.execute(f"DELETE FROM actor_position {obj_ids}")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
+        engine.dispose()
+
 class Stats:
     @staticmethod
     def get_tile_statistics(td=timedelta(days=0), d = None, full=False):
@@ -872,23 +983,40 @@ class Buildings(GameBase):
         where_list = ["id = object_id"] if loc else []
         if loc and len(loc) == 2:
             x, y = loc
-            where_list.append(
-                f"x BETWEEN {x[0]} AND {x[1]} AND "
-                f"y BETWEEN {y[0]} AND {y[1]}"
-            )
+            if not inverse:
+                where_list.append(
+                    f"x BETWEEN {x[0]} AND {x[1]} AND "
+                    f"y BETWEEN {y[0]} AND {y[1]}"
+                )
+            else:
+                where_list.append(
+                    f"NOT (x BETWEEN {x[0]} AND {x[1]} AND "
+                    f"     y BETWEEN {y[0]} AND {y[1]})"
+                )
+
         elif loc and len(loc) == 3:
             x, y, z = loc
-            where_list.append(
-                f"x BETWEEN {x[0]} AND {x[1]} AND "
-                f"y BETWEEN {y[0]} AND {y[1]} AND "
-                f"z BETWEEN {z[0]} AND {z[1]}"
-            )
+            if not inverse:
+                where_list.append(
+                    f"x BETWEEN {x[0]} AND {x[1]} AND "
+                    f"y BETWEEN {y[0]} AND {y[1]} AND "
+                    f"z BETWEEN {z[0]} AND {z[1]}"
+                )
+            else:
+                where_list.append(
+                    f"NOT (x BETWEEN {x[0]} AND {x[1]} AND "
+                    f"     y BETWEEN {y[0]} AND {y[1]} AND "
+                    f"     z BETWEEN {z[0]} AND {z[1]})"
+                )
         if owner_ids:
             o_ids = owner_ids if not isinstance(owner_ids, ITER) else iter2str(owner_ids)
             if not inverse:
                 where_list.append(f"owner_id IN ({o_ids})")
             else:
-                where_list.append(f"owner_id NOT IN ({o_ids})")
+                where_list.append(f"owner_id NOT IN ({o_ids}, 0)")
+        else:
+            # avoid deleting the game internal buildings belonging to owner_id 0
+            where_list.append("owner_id != 0")
         if len(where_list) > 0:
             query_list.append("WHERE " + " AND ".join(where_list))
         return ' '.join(query_list)
@@ -897,22 +1025,11 @@ class Buildings(GameBase):
     def _get_objects_filter(owner_ids=None, loc=None, inverse=False):
         owner_filter = None
         if owner_ids:
-            print("owner_ids")
             if not inverse:
-                print("not inverse")
                 if isinstance(owner_ids, int):
-                    print("int")
                     owner_filter = (Buildings.owner_id == owner_ids)
-                    print(type(owner_filter))
-                    if owner_filter is not None:
-                        print("owner_filter is not None")
-                    else:
-                        print("owner_filter is None")
                 elif isinstance(owner_ids, ITER):
-                    print("iter")
                     owner_filter = (Buildings.owner_id.in_(owner_ids))
-                else:
-                    print(type(owner_ids))
             else:
                 if isinstance(owner_ids, int):
                     owner_filter = (Buildings.owner_id != owner_ids)
@@ -938,16 +1055,12 @@ class Buildings(GameBase):
                 )
 
         if owner_filter is not None and loc_filter is None:
-            print("1+0")
             return owner_filter
         elif owner_filter is None and loc_filter is not None:
-            print("0+1")
             return loc_filter
         elif owner_filter is not None and loc_filter is not None:
-            print("1+1")
             return owner_filter & loc_filter
         else:
-            print("0+0")
             return ()
 
     @staticmethod
@@ -1025,14 +1138,19 @@ class Buildings(GameBase):
 
         # do the actual deleting
         with engine.begin() as conn:
-            conn.execute(f"DELETE FROM buildable_health WHERE object_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM building_instances WHERE object_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM destruction_history WHERE object_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM item_inventory WHERE owner_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM item_properties WHERE owner_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM properties WHERE object_id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids})")
-            conn.execute(f"DELETE FROM buildings WHERE object_id IN ({obj_ids})")
+            obj_ids_tt = "SELECT object_id FROM obj_ids"
+            conn.execute(f"CREATE TEMPORARY TABLE obj_ids AS {obj_ids}")
+            conn.execute(f"DELETE FROM buildable_health WHERE object_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM building_instances WHERE object_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM destruction_history WHERE object_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM item_inventory WHERE owner_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM item_properties WHERE owner_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM properties WHERE object_id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids_tt})")
+            conn.execute(f"DELETE FROM buildings WHERE object_id IN ({obj_ids_tt})")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
         engine.dispose()
 
     @staticmethod
@@ -1112,6 +1230,91 @@ class Guilds(GameBase, Owner):
     @property
     def is_character(self):
         return False
+
+    @staticmethod
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, inverse=False):
+        # copy without owner_ids means copy all guilds the inverse of that is no guilds
+        if owner_ids is None and inverse:
+            return None
+
+        # generate an appropriate WHERE clause
+        def owner_filter(key):
+            slid = "SELECT guildId FROM src.guilds"
+            if owner_ids:
+                if not inverse:
+                    if isinstance(owner_ids, int):
+                        return f"WHERE {key}={owner_ids}"
+                    elif isinstance(owner_ids, ITER):
+                        return f"WHERE {key} IN ({iter2str(owner_ids)})"
+                else:
+                    if isinstance(owner_ids, int):
+                        return f"WHERE {key}!={owner_ids} AND {key} IN ({sldid})"
+                    elif isinstance(owner_ids, ITER):
+                        return f"WHERE {key} NOT IN ({iter2str(owner_ids)}) AND {key} IN ({sldid})"
+            else:
+                return f"WHERE {key} IN ({sldid})"
+
+        def char_filter(key):
+            slcid = "SELECT id FROM src.characters"
+            if owner_ids:
+                if not inverse:
+                    if isinstance(owner_ids, int):
+                        return f"WHERE {key} IN ({slcid} WHERE guild={owner_ids})"
+                    elif isinstance(owner_ids, ITER):
+                        return f"WHERE {key} IN ({slcid} WHERE guild IN ({iter2str(owner_ids)}))"
+                else:
+                    if isinstance(owner_ids, int):
+                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild={owner_ids}) "
+                                f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
+                    elif isinstance(owner_ids, ITER):
+                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild IN ({iter2str(owner_ids)})) "
+                                f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
+            else:
+                return f"WHERE {key} IN ({slcid} WHERE guild IS NOT NULL)"
+
+        # confirm that source and destination files exist
+        if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
+            print("Either source or destination DB file don't exist in saved folder.")
+            return None
+
+        # Try to get engine for the destination db
+        try:
+            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            engine = create_engine(dest_db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open destination DB at {dest_db_uri}.")
+            return None
+
+        # do the actual copying
+        slf = "SELECT * FROM"
+        source_db_path = SAVED_DIR_PATH + '/' + source_db
+        with engine.begin() as conn:
+            conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
+            # Delete conflicting objects in the destination db if they exist
+            conn.execute(f"DELETE FROM purgescores {owner_filter('purgeid')}")
+            conn.execute(f"DELETE FROM guilds {owner_filter('guildId')}")
+            # copy the objects from the source db into the destination db
+            conn.execute(f"REPLACE INTO purgescores {slf} src.purgescores {owner_filter('purgeid')}")
+            conn.execute(f"REPLACE INTO guilds {slf} src.guilds {owner_filter('guildId')}")
+            # if with_chars is True copy the chars of copied guilds as well
+            if with_chars:
+                conn.execute(f"DELETE FROM actor_position {char_filter('id')}")
+                conn.execute(f"DELETE FROM character_stats {char_filter('char_id')}")
+                conn.execute(f"DELETE FROM item_inventory {char_filter('owner_id')}")
+                conn.execute(f"DELETE FROM item_properties {char_filter('owner_id')}")
+                conn.execute(f"DELETE FROM properties {char_filter('object_id')}")
+                conn.execute(f"DELETE FROM purgescores {char_filter('purgeid')}")
+                conn.execute(f"DELETE FROM characters {char_filter('id')}")
+                # copy the objects from the source db into the destination db
+                conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {char_filter('id')}")
+                conn.execute(f"REPLACE INTO character_stats {slf} src.character_stats {char_filter('char_id')}")
+                conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {char_filter('owner_id')}")
+                conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {char_filter('owner_id')}")
+                conn.execute(f"REPLACE INTO properties {slf} src.properties {char_filter('object_id')}")
+                conn.execute(f"REPLACE INTO purgescores {slf} src.purgescores {char_filter('purgeid')}")
+                conn.execute(f"REPLACE INTO characters {slf} src.characters {char_filter('id')}")
+        engine.dispose()
+
     def __repr__(self):
         return f"<Guilds(id={self.id}, name='{self.name}')>"
 
@@ -1239,6 +1442,65 @@ class Characters(GameBase, Owner):
                 char.last_login = ts
         if autocommit:
             session.commit()
+
+    @staticmethod
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, inverse=False):
+        # copy without owner_ids means copy all characters the inverse of that is no characters
+        if owner_ids is None and inverse:
+            return None
+
+        # generate an appropriate WHERE clause
+        def owner_filter(key):
+            if owner_ids:
+                if not inverse:
+                    if isinstance(owner_ids, int):
+                        return f"WHERE {key}={owner_ids}"
+                    elif isinstance(owner_ids, ITER):
+                        return f"WHERE {key} IN ({iter2str(owner_ids)})"
+                else:
+                    slid = "SELECT id FROM src.characters"
+                    if isinstance(owner_ids, int):
+                        return f"WHERE {key}!={owner_ids} AND {key} IN ({slid})"
+                    elif isinstance(owner_ids, ITER):
+                        return f"WHERE {key} NOT IN ({iter2str(owner_ids)}) AND {key} IN ({slid})"
+            else:
+                return f"WHERE {key} IN ({slid})"
+
+        # confirm that source and destination files exist
+        if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
+            print("Either source or destination DB file don't exist in saved folder.")
+            return None
+
+        # Try to get engine for the destination db
+        try:
+            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            engine = create_engine(dest_db_uri, echo=ECHO)
+        except:
+            print(f"Couldn't open destination DB at {dest_db_uri}.")
+            return None
+
+        # do the actual copying
+        slf = "SELECT * FROM"
+        source_db_path = SAVED_DIR_PATH + '/' + source_db
+        with engine.begin() as conn:
+            conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
+            # Delete conflicting objects in the destination db if they exist
+            conn.execute(f"DELETE FROM actor_position {owner_filter('id')}")
+            conn.execute(f"DELETE FROM character_stats {owner_filter('char_id')}")
+            conn.execute(f"DELETE FROM item_inventory {owner_filter('owner_id')}")
+            conn.execute(f"DELETE FROM item_properties {owner_filter('owner_id')}")
+            conn.execute(f"DELETE FROM properties {owner_filter('object_id')}")
+            conn.execute(f"DELETE FROM purgescores {owner_filter('purgeid')}")
+            conn.execute(f"DELETE FROM characters {owner_filter('id')}")
+            # copy the objects from the source db into the destination db
+            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {owner_filter('id')}")
+            conn.execute(f"REPLACE INTO character_stats {slf} src.character_stats {owner_filter('char_id')}")
+            conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {owner_filter('owner_id')}")
+            conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {owner_filter('owner_id')}")
+            conn.execute(f"REPLACE INTO properties {slf} src.properties {owner_filter('object_id')}")
+            conn.execute(f"REPLACE INTO purgescores {slf} src.purgescores {owner_filter('purgeid')}")
+            conn.execute(f"REPLACE INTO characters {slf} src.characters {owner_filter('id')}")
+        engine.dispose()
 
     def __repr__(self):
         return f"<Characters(id={self.id}, name='{self.name}')>"
