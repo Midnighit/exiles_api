@@ -1285,6 +1285,7 @@ class Guilds(GameBase, Owner):
         try:
             dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
             engine = create_engine(dest_db_uri, echo=ECHO)
+            print(dest_db_uri)
         except:
             print(f"Couldn't open destination DB at {dest_db_uri}.")
             return None
@@ -1293,6 +1294,7 @@ class Guilds(GameBase, Owner):
         slf = "SELECT * FROM"
         acc_id = "CASE WHEN INSTR(playerId, '#') > 0 THEN SUBSTR(playerId, 1, LENGTH(playerId)-2) ELSE playerId END"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
+        print(source_db_path)
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
             # Delete conflicting objects in the destination db if they exist
