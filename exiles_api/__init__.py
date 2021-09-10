@@ -50,9 +50,13 @@ def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inv
             elif session.query(Guilds).get(owner_id):
                 guild_ids.append(owner_id)
 
+    print("Copying mods...")
     Mods.copy(source_db, dest_db, mod_names, inverse_mods)
+    print("Copying buildings...")
     Buildings.copy(source_db, dest_db, owner_ids, loc, inverse_owners)
+    print("Copying guilds...")
     Guilds.copy(source_db, dest_db, guild_ids, with_chars, inverse_owners)
+    print("Copying characters...")
     Characters.copy(source_db, dest_db, char_ids, inverse_owners)
 
 def next_time(value):
