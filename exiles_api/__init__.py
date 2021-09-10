@@ -40,7 +40,7 @@ def db_date():
             return c.last_login
     return None
 
-def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inverse_owners=False, loc=None, with_chars=True, inverse_mods=False, mod_names=None):
+def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inverse_owners=False, loc=None, with_chars=True, with_alts=True, inverse_mods=False, mod_names=None):
     if owner_ids:
         guild_ids = []
         char_ids = []
@@ -55,9 +55,9 @@ def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inv
     print("Copying buildings...")
     Buildings.copy(source_db, dest_db, owner_ids, loc, inverse_owners)
     print("Copying guilds...")
-    Guilds.copy(source_db, dest_db, guild_ids, with_chars, inverse_owners)
+    Guilds.copy(source_db, dest_db, guild_ids, with_chars, with_alts, inverse_owners)
     print("Copying characters...")
-    Characters.copy(source_db, dest_db, char_ids, inverse_owners)
+    Characters.copy(source_db, dest_db, char_ids, with_alts, inverse_owners)
 
 def next_time(value):
     weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
@@ -1236,7 +1236,7 @@ class Guilds(GameBase, Owner):
         return False
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, inverse=False):
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
@@ -1263,18 +1263,18 @@ class Guilds(GameBase, Owner):
             if owner_ids:
                 if not inverse:
                     if isinstance(owner_ids, int):
-                        return f"WHERE {key} IN ({slcid} WHERE guild={owner_ids})"
+                        return f"WHERE {key} IN ({slcid} WHERE guild={owner_ids}) OR {key} IN ({iter2str(char_ids)})"
                     elif isinstance(owner_ids, ITER):
-                        return f"WHERE {key} IN ({slcid} WHERE guild IN ({iter2str(owner_ids)}))"
+                        return f"WHERE {key} IN ({slcid} WHERE guild IN ({iter2str(owner_ids)})) OR {key} IN ({iter2str(char_ids)})"
                 else:
                     if isinstance(owner_ids, int):
-                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild={owner_ids}) "
+                        return (f"WHERE {key} NOT IN ({slcid} WHERE (guild={owner_ids} OR {key} IN ({iter2str(char_ids)}))) "
                                 f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
                     elif isinstance(owner_ids, ITER):
-                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild IN ({iter2str(owner_ids)})) "
+                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild IN ({iter2str(owner_ids)}) OR {key} IN ({iter2str(char_ids)})) "
                                 f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
             else:
-                return f"WHERE {key} IN ({slcid} WHERE guild IS NOT NULL)"
+                return f"WHERE {key} IN ({slcid} WHERE {key} IN ({iter2str(char_ids)}) AND guild IS NOT NULL)"
 
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
@@ -1291,6 +1291,7 @@ class Guilds(GameBase, Owner):
 
         # do the actual copying
         slf = "SELECT * FROM"
+        acc_id = "CASE WHEN INSTR(playerId, '#') > 0 THEN SUBSTR(playerId, 1, LENGTH(playerId)-2) ELSE playerId END"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
@@ -1302,6 +1303,14 @@ class Guilds(GameBase, Owner):
             conn.execute(f"REPLACE INTO guilds {slf} src.guilds {owner_filter('guildId')}")
             # if with_chars is True copy the chars of copied guilds as well
             if with_chars:
+                char_ids = []
+                # Get the account ids (playerId) for all characters getting copied
+                conn.execute("CREATE TEMPORARY TABLE acc AS "
+                            f"SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}")
+                if with_alts:
+                    query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
+                    char_ids = tuple(id for id, in query.all())
+                conn.execute(f"DELETE FROM account WHERE id IN ({slf} acc)")
                 conn.execute(f"DELETE FROM actor_position {char_filter('id')}")
                 conn.execute(f"DELETE FROM character_stats {char_filter('char_id')}")
                 conn.execute(f"DELETE FROM item_inventory {char_filter('owner_id')}")
@@ -1310,6 +1319,7 @@ class Guilds(GameBase, Owner):
                 conn.execute(f"DELETE FROM purgescores {char_filter('purgeid')}")
                 conn.execute(f"DELETE FROM characters {char_filter('id')}")
                 # copy the objects from the source db into the destination db
+                conn.execute(f"REPLACE INTO account {slf} src.account WHERE id IN (SELECT * FROM acc)")
                 conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {char_filter('id')}")
                 conn.execute(f"REPLACE INTO character_stats {slf} src.character_stats {char_filter('char_id')}")
                 conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {char_filter('owner_id')}")
@@ -1448,13 +1458,14 @@ class Characters(GameBase, Owner):
             session.commit()
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, inverse=False):
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_alts=False, inverse=False):
         # copy without owner_ids means copy all characters the inverse of that is no characters
         if owner_ids is None and inverse:
             return None
 
         # generate an appropriate WHERE clause
         def owner_filter(key):
+            slid = "SELECT id FROM src.characters"
             if owner_ids:
                 if not inverse:
                     if isinstance(owner_ids, int):
@@ -1462,7 +1473,6 @@ class Characters(GameBase, Owner):
                     elif isinstance(owner_ids, ITER):
                         return f"WHERE {key} IN ({iter2str(owner_ids)})"
                 else:
-                    slid = "SELECT id FROM src.characters"
                     if isinstance(owner_ids, int):
                         return f"WHERE {key}!={owner_ids} AND {key} IN ({slid})"
                     elif isinstance(owner_ids, ITER):
@@ -1485,10 +1495,19 @@ class Characters(GameBase, Owner):
 
         # do the actual copying
         slf = "SELECT * FROM"
+        acc_id = "CASE WHEN INSTR(playerId, '#') > 0 THEN SUBSTR(playerId, 1, LENGTH(playerId)-2) ELSE playerId END"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
+            # Get the account ids (playerId) for all characters getting copied
+            conn.execute("CREATE TEMPORARY TABLE acc AS "
+                        f"SELECT DISTINCT {acc_id} FROM src.characters {owner_filter('id')}")
+            # Extend owner_ids to all chars with a matching account id
+            if with_alts:
+                query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
+                owner_ids = tuple(id for id, in query.all())
             # Delete conflicting objects in the destination db if they exist
+            conn.execute(f"DELETE FROM account WHERE id IN ({slf} acc)")
             conn.execute(f"DELETE FROM actor_position {owner_filter('id')}")
             conn.execute(f"DELETE FROM character_stats {owner_filter('char_id')}")
             conn.execute(f"DELETE FROM item_inventory {owner_filter('owner_id')}")
@@ -1497,6 +1516,7 @@ class Characters(GameBase, Owner):
             conn.execute(f"DELETE FROM purgescores {owner_filter('purgeid')}")
             conn.execute(f"DELETE FROM characters {owner_filter('id')}")
             # copy the objects from the source db into the destination db
+            conn.execute(f"REPLACE INTO account {slf} src.account WHERE id IN (SELECT * FROM acc)")
             conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {owner_filter('id')}")
             conn.execute(f"REPLACE INTO character_stats {slf} src.character_stats {owner_filter('char_id')}")
             conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {owner_filter('owner_id')}")
