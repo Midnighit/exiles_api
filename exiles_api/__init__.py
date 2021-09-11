@@ -1305,17 +1305,10 @@ class Guilds(GameBase, Owner):
             if with_chars:
                 char_ids = []
                 # Get the account ids (playerId) for all characters getting copied
-                print(f"CREATE TEMPORARY TABLE acc AS SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}")
-                result = conn.execute("CREATE TEMPORARY TABLE acc AS "
+                conn.execute("CREATE TEMPORARY TABLE acc AS "
                             f"SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}")
-                print(result)
-                q = conn.execute("SELECT * FROM acc")
-                print(type(q))
-                print(q.all())
                 if with_alts:
-                    print(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
                     query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
-                    print("query:", query)
                     char_ids = tuple(id for id, in query.all())
                 conn.execute(f"DELETE FROM account WHERE id IN ({slf} acc)")
                 conn.execute(f"DELETE FROM actor_position {char_filter('id')}")
