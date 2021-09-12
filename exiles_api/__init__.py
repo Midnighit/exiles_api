@@ -623,7 +623,11 @@ class Mods:
         if not mod_names or (not isinstance(mod_names, str) and not isinstance(mod_names, ITER)):
             # if inverse is False, all mods are copied
             if not inverse:
-                obj_ids = "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1"
+                obj_ids = (
+                    "WHERE (((class LIKE '/Game/Mods/%' OR class LIKE '/Game/DLC/%') "
+                    "AND x=0 AND y=0 AND z=0 AND rx=0 AND ry=0 AND rz=0 AND rw=1) "
+                    "OR id IN (SELECT id FROM static_buildables)"
+                )
             # if inverse is True, no mods are copied
             else:
                 return None
@@ -636,22 +640,23 @@ class Mods:
             else:
                 mod_expr = f"!= '{mod_names}'" if isinstance(mod_names, str) else f" NOT IN ({iter2str(mod_names)})"
             obj_ids = (
-                 "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1 "
-                f"AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/') - 1) {mod_expr}"
+                f"WHERE (((class LIKE '/Game/Mods/%' AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/')-1) {mod_expr}) "
+                 "OR class LIKE '/Game/DLC/%') AND x=0 AND y=0 AND z=0 AND rx=0 AND ry=0 AND rz=0 AND rw=1) "
+                 "OR id IN (SELECT id FROM static_buildables)"
             )
 
-        slf, wobi, sif = "SELECT * FROM", "WHERE object_id IN", "SELECT id FROM"
+        slf, wobi, wii, sifa = "SELECT * FROM", "WHERE object_id IN", "WHERE id IN", "SELECT id FROM src.actor_position"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
             # Delete conflicting objects in the destination db if they exist
             conn.execute(f"DELETE FROM actor_position {obj_ids}")
-            conn.execute(f"DELETE FROM mod_controllers WHERE id IN (SELECT id FROM actor_position {obj_ids})")
-            conn.execute(f"DELETE FROM properties {wobi} ({sif} src.actor_position {obj_ids})")
+            conn.execute(f"DELETE FROM mod_controllers {wii} ({sifa} {obj_ids})")
+            conn.execute(f"DELETE FROM properties {wobi} ({sifa} {obj_ids})")
             # copy the objects from the source db into the destination db
             conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {obj_ids}")
-            conn.execute(f"REPLACE INTO mod_controllers {sif} src.actor_position {obj_ids}")
-            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({sif} src.actor_position {obj_ids})")
+            conn.execute(f"REPLACE INTO mod_controllers {slf} src.mod_controllers {wii} ({sifa} {obj_ids})")
+            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({sifa} {obj_ids})")
         engine.dispose()
 
     @staticmethod
