@@ -657,6 +657,9 @@ class Mods:
             conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position {obj_ids}")
             conn.execute(f"REPLACE INTO mod_controllers {slf} src.mod_controllers {wii} ({sifa} {obj_ids})")
             conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({sifa} {obj_ids})")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
         engine.dispose()
 
     @staticmethod
@@ -1096,6 +1099,20 @@ class Buildings(GameBase):
         # generate the apropriate query with the information given
         obj_ids = Buildings._get_objects_query(owner_ids, loc, inverse, attach='src')
 
+        if owner_ids:
+            if not isinstance(owner_ids, ITER):
+                owner_ids = (owner_ids, )
+            thrall_id_list = []
+            for owner_id in owner_ids:
+                thrall_id = Properties.get_thrall_object_ids(owner_id=owner_id, strict=True)
+                if thrall_id:
+                    thrall_id_list += thrall_id
+            thrall_id_list = map(str, thrall_id_list)
+            if not inverse:
+                thrall_ids = f"IN ({', '.join(thrall_id_list)})"
+            else:
+                thrall_ids = f"NOT IN ({', '.join(thrall_id_list)})"
+
         # do the actual copying
         slf, wobi, wowi = "SELECT * FROM", "WHERE object_id IN", "WHERE owner_id IN"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
@@ -1104,21 +1121,24 @@ class Buildings(GameBase):
             # Delete conflicting objects in the destination db if they exist
             conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids})")
             conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids})")
-            conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids})")
-            conn.execute(f"DELETE FROM item_inventory {wowi} ({obj_ids})")
-            conn.execute(f"DELETE FROM item_properties {wowi} ({obj_ids})")
-            conn.execute(f"DELETE FROM properties {wobi} ({obj_ids})")
-            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids})")
+            conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"DELETE FROM item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"DELETE FROM item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"DELETE FROM properties {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
             conn.execute(f"DELETE FROM buildings {wobi} ({obj_ids})")
             # copy the objects from the source db into the destination db
             conn.execute(f"REPLACE INTO buildable_health {slf} src.buildable_health {wobi} ({obj_ids})")
             conn.execute(f"REPLACE INTO building_instances {slf} src.building_instances {wobi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO destruction_history {slf} src.destruction_history {wobi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {wowi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {wowi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position WHERE id IN ({obj_ids})")
+            conn.execute(f"REPLACE INTO destruction_history {slf} src.destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
             conn.execute(f"REPLACE INTO buildings {slf} src.buildings {wobi} ({obj_ids})")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
         engine.dispose()
 
     @staticmethod
@@ -1332,6 +1352,9 @@ class Guilds(GameBase, Owner):
                 conn.execute(f"REPLACE INTO properties {slf} src.properties {char_filter('object_id')}")
                 conn.execute(f"REPLACE INTO purgescores {slf} src.purgescores {char_filter('purgeid')}")
                 conn.execute(f"REPLACE INTO characters {slf} src.characters {char_filter('id')}")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
         engine.dispose()
 
     def __repr__(self):
@@ -1529,6 +1552,9 @@ class Characters(GameBase, Owner):
             conn.execute(f"REPLACE INTO properties {slf} src.properties {owner_filter('object_id')}")
             conn.execute(f"REPLACE INTO purgescores {slf} src.purgescores {owner_filter('purgeid')}")
             conn.execute(f"REPLACE INTO characters {slf} src.characters {owner_filter('id')}")
+
+        with engine.begin() as conn:
+            conn.execute("VACUUM")
         engine.dispose()
 
     def __repr__(self):
