@@ -1119,8 +1119,8 @@ class Buildings(GameBase):
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
             # Delete conflicting objects in the destination db if they exist
-            conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids})")
-            conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids})")
+            conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids}) OR object_id {thrall_ids}")
             conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
             conn.execute(f"DELETE FROM item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
             conn.execute(f"DELETE FROM item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
@@ -1128,8 +1128,8 @@ class Buildings(GameBase):
             conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
             conn.execute(f"DELETE FROM buildings {wobi} ({obj_ids})")
             # copy the objects from the source db into the destination db
-            conn.execute(f"REPLACE INTO buildable_health {slf} src.buildable_health {wobi} ({obj_ids})")
-            conn.execute(f"REPLACE INTO building_instances {slf} src.building_instances {wobi} ({obj_ids})")
+            conn.execute(f"REPLACE INTO buildable_health {slf} src.buildable_health {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"REPLACE INTO building_instances {slf} src.building_instances {wobi} ({obj_ids}) OR object_id {thrall_ids}")
             conn.execute(f"REPLACE INTO destruction_history {slf} src.destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
             conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
             conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
