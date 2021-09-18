@@ -30,7 +30,7 @@ session = Session()
 GameBase.metadata = metadata
 
 RANKS = ('Recruit', 'Member', 'Officer', 'Guildmaster')
-ITER = (list, tuple)
+ITER = (list, tuple, set)
 NUMBER = (int, float)
 
 def db_date():
