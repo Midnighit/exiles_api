@@ -1277,11 +1277,11 @@ class Guilds(GameBase, Owner):
                         return f"WHERE {key} IN ({iter2str(owner_ids)})"
                 else:
                     if isinstance(owner_ids, int):
-                        return f"WHERE {key}!={owner_ids} AND {key} IN ({sldid})"
+                        return f"WHERE {key}!={owner_ids} AND {key} IN ({slid})"
                     elif isinstance(owner_ids, ITER):
-                        return f"WHERE {key} NOT IN ({iter2str(owner_ids)}) AND {key} IN ({sldid})"
+                        return f"WHERE {key} NOT IN ({iter2str(owner_ids)}) AND {key} IN ({slid})"
             else:
-                return f"WHERE {key} IN ({sldid})"
+                return f"WHERE {key} IN ({slid})"
 
         def char_filter(key):
             slcid = "SELECT id FROM src.characters"
