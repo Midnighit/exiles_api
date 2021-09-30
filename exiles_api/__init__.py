@@ -1764,17 +1764,17 @@ class Properties(GameBase):
         return owners
 
     @staticmethod
-    def get_pippi_money(name=None, owner_id=None):
+    def get_pippi_money(name=None, char_id=None, as_number=False):
         if name:
             # if there are no matching results or the name is ambiguous, return None
-            owners = Owner.get_by_name(name, nocase=True, include_guilds=False)
-            if len(owners) != 1:
+            chars = Owner.get_by_name(name, nocase=True, include_guilds=False)
+            if len(chars) != 1:
                 return None
 
-            owner_id = owners[0].id
+            char_id = chars[0].id
 
         # get the property row with the Pippi wallet belonging to the owner
-        p = session.query(Properties).filter_by(object_id=owner_id, name="Pippi_WalletComponent_C.walletAmount").first()
+        p = session.query(Properties).filter_by(object_id=char_id, name="Pippi_WalletComponent_C.walletAmount").first()
         if not p:
             # if no such owner exists or they don't have a wallet, return None
             return None
@@ -1782,7 +1782,10 @@ class Properties(GameBase):
         gold = unpack('>Q', p.value[66:74])[0]
         silver = unpack('>Q', p.value[141:149])[0]
         bronze = unpack('>Q', p.value[216:224])[0]
-        return (gold, silver, bronze)
+        if not as_number:
+            return (gold, silver, bronze)
+        else:
+            return (gold / 100 + silver) / 100 + bronze
 
     @staticmethod
     def give_thrall(object_ids, owner_id, autocommit=True):

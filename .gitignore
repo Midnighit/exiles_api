@@ -138,6 +138,9 @@ dmypy.json
 # log folder
 logs/
 
+# batch files
+*.bat
+
 # test
 test.*
 config.py
