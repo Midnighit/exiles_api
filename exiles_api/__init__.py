@@ -1765,19 +1765,31 @@ class Properties(GameBase):
 
     @staticmethod
     def get_pippi_money(name=None, char_id=None, as_number=False):
-        if name:
+        # if char_id was given, ensure that there's actually a character with that id.
+        if char_id and not session.query(Characters).get(char_id):
+            return None
+
+        # if a name was given, try to determine a character with that name
+        elif name:
             # if there are no matching results or the name is ambiguous, return None
             chars = Owner.get_by_name(name, nocase=True, include_guilds=False)
             if len(chars) != 1:
                 return None
 
             char_id = chars[0].id
+        
+        # if neither char_id nor name were given return None
+        else:
+            return None
 
         # get the property row with the Pippi wallet belonging to the owner
         p = session.query(Properties).filter_by(object_id=char_id, name="Pippi_WalletComponent_C.walletAmount").first()
         if not p:
-            # if no such owner exists or they don't have a wallet, return None
-            return None
+            # if owner exists but they don't have a wallet, return 0
+            if not as_number:
+                return (0, 0, 0)
+            else:
+                return 0
 
         gold = unpack('>Q', p.value[66:74])[0]
         silver = unpack('>Q', p.value[141:149])[0]
