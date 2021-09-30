@@ -1779,7 +1779,7 @@ class Properties(GameBase):
             char_id = chars[0].id
         
         # if neither char_id nor name were given return None
-        else:
+        elif not char_id and not name:
             return None
 
         # get the property row with the Pippi wallet belonging to the owner
