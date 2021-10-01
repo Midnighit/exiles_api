@@ -1764,40 +1764,99 @@ class Properties(GameBase):
         return owners
 
     @staticmethod
-    def get_pippi_money(name=None, char_id=None, as_number=False):
+    def get_pippi_money(name=None, char_id=None, guild_id=None, with_chars=True, with_thespians=True, as_number=False):
+
+        # returns the money as number or tuple accounting for the possibility of no wallet as well
+        def get_money(properties):
+            # if wallet for owner was found unpack and return its value
+            if properties:
+                gold = unpack('>Q', properties.value[66:74])[0]
+                silver = unpack('>Q', properties.value[141:149])[0]
+                bronze = unpack('>Q', properties.value[216:224])[0]
+                return (gold, silver, bronze) if not as_number else ((bronze / 100. + silver) / 100. + gold)
+            # if no wallet exists return 0
+            else:
+                return (0, 0, 0) if not as_number else 0
+
         # if char_id was given, ensure that there's actually a character with that id.
         if char_id and not session.query(Characters).get(char_id):
             return None
 
-        # if a name was given, try to determine a character with that name
-        elif name:
-            # if there are no matching results or the name is ambiguous, return None
-            chars = Owner.get_by_name(name, nocase=True, include_guilds=False)
-            if len(chars) != 1:
-                return None
-
-            char_id = chars[0].id
-        
-        # if neither char_id nor name were given return None
-        elif not char_id and not name:
+        # if guild_id was given, ensure that there's actually a guild with that id.
+        if guild_id and not session.query(Guilds).get(guild_id):
             return None
 
-        # get the property row with the Pippi wallet belonging to the owner
-        p = session.query(Properties).filter_by(object_id=char_id, name="Pippi_WalletComponent_C.walletAmount").first()
-        if not p:
-            # if owner exists but they don't have a wallet, return 0
-            if not as_number:
-                return (0, 0, 0)
-            else:
-                return 0
+        # if a name was given, try to determine an owner with that name
+        elif name:
+            # if there are no matching results or the name is ambiguous, return None
+            owners = Owner.get_by_name(name, nocase=True)
+            if len(owners) != 1:
+                return None
+            if owners[0].is_character:
+                char_id = owners[0].id
+            elif owners[0].is_guild:
+                guild_id = owners[0].id
 
-        gold = unpack('>Q', p.value[66:74])[0]
-        silver = unpack('>Q', p.value[141:149])[0]
-        bronze = unpack('>Q', p.value[216:224])[0]
+        # at this point either char_id or guild_id must be known
+        elif not char_id and not guild_id:
+            return None
+
+        p_name = "Pippi_WalletComponent_C.walletAmount"
+        # if char_id is known determine Pippi money for that char
+        if char_id:
+            p = session.query(Properties).filter_by(object_id=char_id, name=p_name).first()
+            # if owner exists but they don't have a wallet, return 0
+            money = get_money(p)
+            # if with_thespians is True include all thespians belonging to the character to the total Pippi money
+            if with_thespians:
+                query = (
+                    session.query(Properties).
+                        filter(Buildings.object_id==Properties.object_id).
+                        filter(Buildings.owner_id==char_id).
+                        filter(Properties.name==p_name)
+                )
+                # for each thespian owned by the char add their money to the chars own money
+                for p in query.all():
+                    add_money = get_money(p)
+                    money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
+        
+        # if guild_id is known determine Pippi money for that guild
+        elif guild_id:
+            # initialise money variable with 0
+            money = 0 if as_number else (0, 0, 0)
+            # if chars are to be included recursively call the function with each individual char
+            if with_chars:
+                guild = session.query(Guilds).get(guild_id)
+                for member in guild.members:
+                    add_money = Properties.get_pippi_money(
+                        char_id=member.id,
+                        with_thespians=with_thespians,
+                        as_number=as_number
+                    )
+                    # for each char add their money to the sum total
+                    money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
+
+            # if with_thespians is True include all thespians belonging to the guild to the total Pippi money
+            if with_thespians:
+                query = (
+                    session.query(Properties).
+                        filter(Buildings.object_id==Properties.object_id).
+                        filter(Buildings.owner_id==guild_id).
+                        filter(Properties.name==p_name)
+                )
+                # for each thespian owned by the char add their money to the chars own money
+                for p in query.all():
+                    add_money = get_money(p)
+                    money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
+
+        # convert bronze to silver and silver to gold if money is returned as tupel
         if not as_number:
+            silver, bronze = divmod(money[2], 100)
+            gold, silver = divmod(money[1] + silver, 100)
+            gold = money[0] + gold
             return (gold, silver, bronze)
         else:
-            return (gold / 100 + silver) / 100 + bronze
+            return round(money, 4)
 
     @staticmethod
     def give_thrall(object_ids, owner_id, autocommit=True):
