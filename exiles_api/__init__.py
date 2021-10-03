@@ -1,21 +1,26 @@
-import os, json, warnings
+import os
+import json
+import warnings
 from statistics import median, mean
-from config import *
 from math import floor, ceil, sqrt
 from struct import pack, unpack
 from time import sleep
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, timedelta, time
 from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import create_engine, literal, desc, MetaData, Table, exc as sa_exc
-from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, Float, DateTime, Boolean, Interval
+from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
+from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean, Interval
+from config import (
+    GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH
+)
 
 GameBase = declarative_base()
 UsersBase = declarative_base()
 
 engines = {"gamedb": create_engine(GAME_DB_URI, echo=ECHO), "usersdb": create_engine(USERS_DB_URI, echo=ECHO)}
 metadata = MetaData(bind=engines["gamedb"])
+
 
 # override Session.get_bind
 class RoutingSession(Session):
@@ -25,6 +30,7 @@ class RoutingSession(Session):
         else:
             return engines["usersdb"]
 
+
 Session = sessionmaker(class_=RoutingSession)
 session = Session()
 GameBase.metadata = metadata
@@ -33,6 +39,7 @@ RANKS = ('Recruit', 'Member', 'Officer', 'Guildmaster')
 ITER = (list, tuple, set)
 NUMBER = (int, float)
 
+
 def db_date():
     now = datetime.utcnow()
     for c in session.query(Characters).order_by(desc(Characters._last_login)).all():
@@ -40,7 +47,18 @@ def db_date():
             return c.last_login
     return None
 
-def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inverse_owners=False, loc=None, with_chars=True, with_alts=True, inverse_mods=False, mod_names=None):
+
+def make_instance_db(
+    source_db="game.db",
+    dest_db="dest.db",
+    owner_ids=None,
+    inverse_owners=False,
+    loc=None,
+    with_chars=True,
+    with_alts=True,
+    inverse_mods=False,
+    mod_names=None
+):
     if owner_ids:
         guild_ids = []
         char_ids = []
@@ -59,6 +77,7 @@ def make_instance_db(source_db="game.db", dest_db="dest.db", owner_ids=None, inv
     print("Copying characters...")
     Characters.copy(source_db, dest_db, char_ids, with_alts, inverse_owners)
 
+
 def next_time(value):
     weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
     now = datetime.utcnow()
@@ -71,6 +90,7 @@ def next_time(value):
         days_ahead = 7
     return today + timedelta(days=days_ahead)
 
+
 def iter2str(value):
     if not isinstance(value, ITER):
         return value
@@ -78,6 +98,7 @@ def iter2str(value):
         return str(value)[1:-2]
     else:
         return str(value)[1:-1]
+
 
 # non-db classes
 class ChatLogs:
@@ -176,13 +197,17 @@ class ChatLogs:
         src_path = os.path.join(self.path, 'PippiCommands.log')
         last_edit = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime('%Y.%m.%d-%H.%M.%S')
         dst_path = src_path[:-4] + '-backup-' + last_edit + '.log'
+        counter = 1
         while True:
             try:
                 os.rename(src_path, dst_path)
                 self.pippi[0]['name'] = 'PippiCommands-backup-' + last_edit + '.log'
                 break
             except Exception as exc:
-                print(f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\nTrying again in 1 second.")
+                print(
+                    f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\n"
+                    f"Trying again in 1 second."
+                )
                 if counter < 5:
                     counter += 1
                     sleep(1)
@@ -212,7 +237,7 @@ class ChatLogs:
     def get_date(line):
         try:
             return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
-        except:
+        except Exception:
             return None
 
     @staticmethod
@@ -222,7 +247,7 @@ class ChatLogs:
         [2000.01.01-12.00.00:000][Pippi]PippiChat: Alice said in channel [Alice:Bob]: Hello Bob!
                                                    ^div_1                          ^div_2
         """
-        if not '[Pippi]PippiChat: ' in line:
+        if '[Pippi]PippiChat: ' not in line:
             return (None, None, None, None, None)
         div_1 = 43
         div_2 = line.find(']', div_1)
@@ -246,6 +271,7 @@ class ChatLogs:
             return (date.strftime(date_format), sender, recipient, channel, chat)
         else:
             return (date, sender, recipient, channel, chat)
+
 
 class Owner:
     @staticmethod
@@ -303,16 +329,19 @@ class Owner:
                           object_id=res[0],
                           amount=res[1]*bMult)
             for res in session.query(Buildings.object_id, func.count(Buildings.object_id))
-                              .filter(Buildings.owner_id==self.id, Buildings.object_id==BuildingInstances.object_id)
+                              .filter(Buildings.owner_id == self.id, Buildings.object_id == BuildingInstances.object_id)
                               .group_by(Buildings.object_id).all())
-        root = tuple(res[0] for res in session.query(distinct(Buildings.object_id))
-                          .filter(Buildings.owner_id==self.id, Buildings.object_id==BuildingInstances.object_id).all())
+        root = tuple(
+            res[0] for res in session.query(distinct(Buildings.object_id)).filter(
+                Buildings.owner_id == self.id, Buildings.object_id == BuildingInstances.object_id
+            ).all()
+        )
         pTiles = tuple(
             Placeables(owner_id=self.id,
                        object_id=res[0],
                        amount=pMult)
             for res in session.query(Buildings.object_id)
-                              .filter(Buildings.owner_id==self.id, Buildings.object_id.notin_(root)).all())
+                              .filter(Buildings.owner_id == self.id, Buildings.object_id.notin_(root)).all())
         return bTiles + pTiles
 
     def num_tiles(self, bMult=1, pMult=1, r=True):
@@ -321,6 +350,7 @@ class Owner:
         for t in tiles:
             sum += t.amount
         return int(round(sum, 0)) if r else sum
+
 
 class Tiles:
     def __init__(self, *args, **kwargs):
@@ -332,30 +362,34 @@ class Tiles:
     @property
     def owner(self):
         if self.owner_id:
-            return session.query(Characters).filter(Characters.id==self.owner_id).first() or \
-                   session.query(Guilds).filter(Guilds.id==self.owner_id).first()
+            return session.query(Characters).filter(Characters.id == self.owner_id).first() or \
+                   session.query(Guilds).filter(Guilds.id == self.owner_id).first()
         elif self.object_id:
-            return session.query(Characters).filter(Buildings.object_id==self.object_id,
-                                                    Buildings.owner_id==Characters.id).first()
+            return session.query(Characters).filter(Buildings.object_id == self.object_id,
+                                                    Buildings.owner_id == Characters.id).first()
         return None
 
     @staticmethod
     def remove(object_ids, autocommit=True):
         if not isinstance(object_ids, ITER):
-            object_ids = (object_ids,)
-        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Buildings).filter(Buildings.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
+            obj = (object_ids,)
+        f = 'fetch'
+        session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(obj)).delete(synchronize_session=f)
+        session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(obj)).delete(synchronize_session=f)
+        session.query(Buildings).filter(Buildings.object_id.in_(obj)).delete(synchronize_session=f)
+        session.query(DestructionHistory).filter(DestructionHistory.object_id.in_(obj)).delete(synchronize_session=f)
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(obj)).delete(synchronize_session=f)
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(obj)).delete(synchronize_session=f)
+        session.query(Properties).filter(Properties.object_id.in_(obj)).delete(synchronize_session=f)
+        session.query(ActorPosition).filter(ActorPosition.id.in_(obj)).delete(synchronize_session=f)
         if autocommit:
             session.commit()
 
     def __repr__(self):
-        return f"<Tiles(owner_id={self.owner_id}, object_id={self.object_id}, amount={self.amount}, type='{self.type}')>"
+        return (
+            f"<Tiles(owner_id={self.owner_id}, object_id={self.object_id}, amount={self.amount}, type='{self.type}')>"
+        )
+
 
 class Thralls:
     def __init__(self, *args, **kwargs):
@@ -366,8 +400,8 @@ class Thralls:
     @property
     def owner(self):
         if self.owner_id:
-            return session.query(Characters).filter(Characters.id==self.owner_id).first() or \
-                   session.query(Guilds).filter(Guilds.id==self.owner_id).first()
+            return session.query(Characters).filter(Characters.id == self.owner_id).first() or \
+                   session.query(Guilds).filter(Guilds.id == self.owner_id).first()
         elif self.object_id:
             property = session.query(Properties).filter_by(object_id=self.object_id).first()
             if property:
@@ -378,26 +412,30 @@ class Thralls:
     def remove(object_ids, autocommit=True):
         if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session='fetch')
-        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session='fetch')
+        f = 'fetch'
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session=f)
+        session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session=f)
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(object_ids)).delete(synchronize_session=f)
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(object_ids)).delete(synchronize_session=f)
+        session.query(ActorPosition).filter(ActorPosition.id.in_(object_ids)).delete(synchronize_session=f)
         if autocommit:
             session.commit()
 
     def __repr__(self):
         return f"<Thrall(owner_id={self.owner_id}, object_id={self.object_id}, type='{self.type}')>"
 
+
 class BuildingTiles(Tiles):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.type = 'Building'
 
+
 class Placeables(Tiles):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.type = 'Placeable'
+
 
 class CharList(tuple):
     @property
@@ -415,6 +453,7 @@ class CharList(tuple):
 
     def inactive(self, td):
         return CharList(c for c in self if c.last_login < datetime.utcnow() - td)
+
 
 class PropertiesList(tuple):
     @property
@@ -448,6 +487,7 @@ class PropertiesList(tuple):
             return None
         return Owner.get(id)
 
+
 class TilesManager:
     @staticmethod
     def get_tiles_by_owner(bMult=1, pMult=1, do_round=True):
@@ -455,9 +495,9 @@ class TilesManager:
         tiles = {}
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
         root = set()
-        # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated objects
+        # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated obj
         for res in session.query(Buildings.object_id, Buildings.owner_id, func.count(Buildings.object_id)) \
-                          .filter(Buildings.object_id==BuildingInstances.object_id) \
+                          .filter(Buildings.object_id == BuildingInstances.object_id) \
                           .group_by(Buildings.object_id).all():
             # create a new dict entry if owner does not have one yet
             if not res[1] in tiles:
@@ -469,7 +509,8 @@ class TilesManager:
             root.add(res[0])
 
         # res has format: (object_id, owner_id) contains all building tiles and placeables
-        for res in session.query(Buildings.object_id, Buildings.owner_id).filter(Buildings.object_id==ActorPosition.id).all():
+        for res in session.query(Buildings.object_id, Buildings.owner_id) \
+                          .filter(Buildings.object_id == ActorPosition.id).all():
             # if object is not a root object, it is a placeable and needs to be added now
             if not res[0] in root:
                 # if owner is not in tiles (i.e. owner has no building tiles) create a new dict entry
@@ -493,9 +534,12 @@ class TilesManager:
         query = (AP.x, AP.y, AP.z, AP.class_, B.object_id, B.owner_id, func.count(B.object_id))
         filter = (AP.id == B.object_id) & (B.object_id == BI.object_id)
         # get all Building pieces and their associated coordiantes and owners excluding pure placeables
-        for x, y, z, class_, object_id, owner_id, tiles in session.query(*query).filter(filter).group_by(B.object_id).all():
+        tiles = session.query(*query).filter(filter).group_by(B.object_id)
+        for x, y, z, class_, object_id, owner_id, tiles in tiles.all():
             _, _, c = class_.partition('.')
-            tiles_to_consolidate[object_id] = {'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': tiles * bMult}
+            tiles_to_consolidate[object_id] = {
+                'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': tiles * bMult
+            }
             # keep a second dict to allow us to find all the objects belonging to an object_id
             if owner_id in owner_index:
                 owner_index[owner_id] += [object_id]
@@ -533,9 +577,11 @@ class TilesManager:
                 # go through all the remaining objects belonging to the same owner
                 for j in range(i + 1, len(object_ids)):
                     # calculate distance to comparison object
-                    dist = sqrt((tiles_to_consolidate[object_ids[i]]['x'] - tiles_to_consolidate[object_ids[j]]['x'])**2 +
-                                (tiles_to_consolidate[object_ids[i]]['y'] - tiles_to_consolidate[object_ids[j]]['y'])**2 +
-                                (tiles_to_consolidate[object_ids[i]]['z'] - tiles_to_consolidate[object_ids[j]]['z'])**2)
+                    dist = sqrt(
+                        (tiles_to_consolidate[object_ids[i]]['x'] - tiles_to_consolidate[object_ids[j]]['x'])**2 +
+                        (tiles_to_consolidate[object_ids[i]]['y'] - tiles_to_consolidate[object_ids[j]]['y'])**2 +
+                        (tiles_to_consolidate[object_ids[i]]['z'] - tiles_to_consolidate[object_ids[j]]['z'])**2
+                    )
                     # if distance is shorter put it on the remove list and add tiles to current object
                     if dist <= min_dist:
                         remove.add(object_ids[j])
@@ -552,6 +598,7 @@ class TilesManager:
 
         return tiles_consolidated
 
+
 class MembersManager:
     @staticmethod
     def _get_guilds_query(threshold, only_with_buildings=True):
@@ -559,16 +606,18 @@ class MembersManager:
             warnings.simplefilter("ignore", category=sa_exc.SAWarning)
             C = Characters
             G = Guilds
-            subquery1 = session.query(C.guild_id).filter(C.guild_id != None).subquery()
+            subquery1 = session.query(C.guild_id).filter(C.guild_id.isnot(None)).subquery()
             subquery2 = session.query(Buildings.owner_id).subquery()
             query = G.id, G.name, literal(0).label("members"), literal(0).label("last_login")
             filter = G.id.notin_(subquery1), G.id.in_(subquery2) if only_with_buildings else G.id.notin_(subquery1),
             empty_guilds = session.query(*query).filter(*filter)
             query = C.guild_id, G.name, func.count(C.guild_id), C._last_login
             if only_with_buildings:
-                filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id, C.guild_id.in_(subquery2)
+                filter = (
+                    C.guild_id.isnot(None), C._last_login >= threshold, G.id == C.guild_id, C.guild_id.in_(subquery2)
+                )
             else:
-                filter = C.guild_id!=None, C._last_login>=threshold, G.id==C.guild_id
+                filter = C.guild_id.isnot(None), C._last_login >= threshold, G.id == C.guild_id
             populated_guilds = session.query(*query).filter(*filter).group_by(C.guild_id)
             return empty_guilds.union(populated_guilds)
 
@@ -578,8 +627,8 @@ class MembersManager:
             warnings.simplefilter("ignore", category=sa_exc.SAWarning)
             if only_with_buildings:
                 subquery = session.query(Buildings.owner_id).subquery()
-                return session.query(Characters.id, Characters.name, Characters._last_login). \
-                               filter(Characters.id.in_(subquery))
+                return session.query(Characters.id, Characters.name, Characters._last_login) \
+                              .filter(Characters.id.in_(subquery))
             else:
                 return session.query(Characters.id, Characters.name, Characters._last_login).filter_by(guild_id=None)
 
@@ -603,6 +652,7 @@ class MembersManager:
             members[g]['numActiveMembers'] = 0
         return members
 
+
 class Mods:
     @staticmethod
     def copy(source_db="game.db", dest_db="dest.db", mod_names=None, inverse=False):
@@ -613,9 +663,9 @@ class Mods:
 
         # Try to get engine for the destination db
         try:
-            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            dest_db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
             engine = create_engine(dest_db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open destination DB at {dest_db_uri}.")
             return None
 
@@ -640,9 +690,10 @@ class Mods:
             else:
                 mod_expr = f"!= '{mod_names}'" if isinstance(mod_names, str) else f" NOT IN ({iter2str(mod_names)})"
             obj_ids = (
-                f"WHERE (((class LIKE '/Game/Mods/%' AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/')-1) {mod_expr}) "
-                 "OR class LIKE '/Game/DLC/%') AND x=0 AND y=0 AND z=0 AND rx=0 AND ry=0 AND rz=0 AND rw=1) "
-                 "OR id IN (SELECT id FROM static_buildables)"
+                f"WHERE (((class LIKE '/Game/Mods/%' "
+                f"AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/')-1) {mod_expr}) "
+                f"OR class LIKE '/Game/DLC/%') AND x=0 AND y=0 AND z=0 AND rx=0 AND ry=0 AND rz=0 AND rw=1) "
+                f"OR id IN (SELECT id FROM static_buildables)"
             )
 
         slf, wobi, wii, sifa = "SELECT * FROM", "WHERE object_id IN", "WHERE id IN", "SELECT id FROM src.actor_position"
@@ -671,9 +722,9 @@ class Mods:
 
         # Try to get engine for the destination db
         try:
-            db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + db
+            db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + db
             engine = create_engine(db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open destination DB at {db_uri}.")
             return None
 
@@ -694,7 +745,7 @@ class Mods:
             else:
                 mod_expr = f"!= '{mod_names}'" if isinstance(mod_names, str) else f" NOT IN ({iter2str(mod_names)})"
             obj_ids = (
-                 "WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1 "
+                f"WHERE class LIKE '/Game/Mods/%' AND x=0 AND y=0 AND z=0 AND rz=0 AND rw=1 "
                 f"AND SUBSTR(class, 12, INSTR(SUBSTR(class, 12), '/') - 1) {mod_expr}"
             )
 
@@ -707,23 +758,23 @@ class Mods:
             conn.execute("VACUUM")
         engine.dispose()
 
+
 class Stats:
     @staticmethod
-    def get_tile_statistics(td=timedelta(days=0), d = None, full=False):
+    def get_tile_statistics(td=timedelta(days=0), d=None, full=False):
         # timestamp threshold is set based on the the timedelta given and the age of the db
         if not d:
             d = db_date()
         threshold = 0 if not td else int((d - td).timestamp())
         C = Characters
-        G = Guilds
         members = MembersManager.get_members(td, d, False)
         # stores all tiles indexed by their respective owners
         building_tiles, placeables, tiles = {}, {}, {}
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
         root = set()
-        # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated objects
+        # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated obj
         for res in session.query(Buildings.object_id, Buildings.owner_id, func.count(Buildings.object_id)) \
-                          .filter(Buildings.object_id==BuildingInstances.object_id) \
+                          .filter(Buildings.object_id == BuildingInstances.object_id) \
                           .group_by(Buildings.object_id).all():
             # create a new dict entry if owner does not have one yet
             if not res[1] in tiles:
@@ -737,7 +788,9 @@ class Stats:
             root.add(res[0])
 
         # res has format: (object_id, owner_id) contains all building tiles and placeables
-        for res in session.query(Buildings.object_id, Buildings.owner_id).filter(Buildings.object_id==ActorPosition.id).all():
+        filter = (Buildings.object_id == ActorPosition.id)
+        query = (Buildings.object_id, Buildings.owner_id)
+        for res in session.query(query).filter(filter).all():
             # if object is not a root object, it is a placeable and needs to be added now
             if not res[0] in root:
                 # create a new dict entry if owner does not have one yet
@@ -775,7 +828,7 @@ class Stats:
         tiles_active_chars = {id: tiles[id] if id in tiles else 0 for id in active_chars}
 
         # inactive characters regardless of guild status
-        inactive_chars = {id: 1 for id, in session.query(C.id).filter(C._last_login<=threshold).all()}
+        inactive_chars = {id: 1 for id, in session.query(C.id).filter(C._last_login <= threshold).all()}
         tiles_inactive_chars = {id: tiles[id] if id in tiles else 0 for id in inactive_chars}
 
         # single characters or guilds with one member named ruins
@@ -821,7 +874,7 @@ class Stats:
             s['inactiveChars'] = inactive_chars
             s['tilesInactiveChars'] = tiles_inactive_chars
             s['tilesNoOwner'] = tiles_no_owner
-            s['logins'] = session.query(C).filter(C._last_login>=threshold24h).all()
+            s['logins'] = session.query(C).filter(C._last_login >= threshold24h).all()
         # numbers
         s['dbDate'] = d
         s['numTiles'] = sum(building_tiles.values()) + sum(placeables.values())
@@ -849,26 +902,52 @@ class Stats:
         s['numTilesInactiveChars'] = sum(tiles_inactive_chars.values())
         s['numChars'] = s['numActiveChars'] + s['numInactiveChars']
         s['numTilesNoOwner'] = sum(tiles_no_owner.values())
-        s['numLogins'] = session.query(func.count(C.id)).filter(C._last_login>=threshold24h).scalar()
+        s['numLogins'] = session.query(func.count(C.id)).filter(C._last_login >= threshold24h).scalar()
         s['numRuinCharsNoGuild'] = len(ruin_chars_no_guild)
         s['numTilesRuinCharsNoGuild'] = sum(tiles_ruin_chars_no_guild.values())
         s['numRuinCharsGuild'] = len(ruin_chars_guild)
         s['numTilesRuinCharsGuild'] = sum(tiles_ruin_chars_guild.values())
         s['numRuins'] = len(ruins)
         s['numTilesRuins'] = sum(tiles_ruins.values())
-        s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values()) if tiles_active_guilds else None
-        s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values()) if tiles_active_guilds else None
-        s['meanTilesInactiveGuilds'] = mean(tiles_inactive_guilds.values()) if tiles_inactive_guilds else None
-        s['medianTilesInactiveGuilds'] = median(tiles_inactive_guilds.values()) if tiles_inactive_guilds else None
-        s['meanTilesActiveCharsNoGuild'] = mean(tiles_active_chars_no_guild.values()) if tiles_active_chars_no_guild else None
-        s['medianTilesActiveCharsNoGuild'] = median(tiles_active_chars_no_guild.values()) if tiles_active_chars_no_guild else None
-        s['meanTilesInactiveCharsNoGuild'] = mean(tiles_inactive_chars_no_guild.values()) if tiles_inactive_chars_no_guild else None
-        s['medianTilesInactiveCharsNoGuild'] = median(tiles_inactive_chars_no_guild.values()) if tiles_inactive_chars_no_guild else None
-        s['meanTilesActiveChars'] = mean(tiles_active_chars.values()) if tiles_active_chars else None
-        s['medianTilesActiveChars'] = median(tiles_active_chars.values()) if tiles_active_chars else None
-        s['meanTilesInactiveChars'] = mean(tiles_inactive_chars.values()) if tiles_inactive_chars else None
-        s['medianTilesInactiveChars'] = median(tiles_inactive_chars.values()) if tiles_inactive_chars else None
+        if tiles_active_guilds:
+            s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values())
+            s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values())
+        else:
+            s['meanTilesActiveGuilds'] = None
+            s['medianTilesActiveGuilds'] = None
+        if tiles_inactive_guilds:
+            s['meanTilesInactiveGuilds'] = mean(tiles_inactive_guilds.values())
+            s['medianTilesInactiveGuilds'] = median(tiles_inactive_guilds.values())
+        else:
+            s['meanTilesInactiveGuilds'] = None
+            s['medianTilesInactiveGuilds'] = None
+        if tiles_active_chars_no_guild:
+            s['meanTilesActiveCharsNoGuild'] = mean(tiles_active_chars_no_guild.values())
+            s['medianTilesActiveCharsNoGuild'] = median(tiles_active_chars_no_guild.values())
+        else:
+            s['meanTilesActiveCharsNoGuild'] = None
+            s['medianTilesActiveCharsNoGuild'] = None
+        if tiles_inactive_chars_no_guild:
+            s['meanTilesInactiveCharsNoGuild'] = mean(tiles_inactive_chars_no_guild.values())
+            s['medianTilesInactiveCharsNoGuild'] = median(tiles_inactive_chars_no_guild.values())
+        else:
+            s['meanTilesInactiveCharsNoGuild'] = None
+            s['medianTilesInactiveCharsNoGuild'] = None
+        if tiles_active_chars:
+            s['meanTilesActiveChars'] = mean(tiles_active_chars.values())
+            s['medianTilesActiveChars'] = median(tiles_active_chars.values())
+        else:
+            s['meanTilesActiveChars'] = None
+            s['medianTilesActiveChars'] = None
+        if tiles_inactive_chars:
+            s['meanTilesInactiveChars'] = mean(tiles_inactive_chars.values())
+            s['medianTilesInactiveChars'] = median(tiles_inactive_chars.values())
+        else:
+            s['meanTilesInactiveChars'] = None
+            s['medianTilesInactiveChars'] = None
+
         return s
+
 
 # game.db
 class Account(GameBase):
@@ -882,18 +961,20 @@ class Account(GameBase):
 
     @property
     def characters(self):
-        query = session.query(Characters) \
-                       .filter(Characters.player_id.like((str(self._character.player_id) + '#_')) |
-                              (Characters.player_id==self._character.player_id)) \
-                       .order_by(Characters.player_id)
+        filter = (
+            Characters.player_id.like((str(self._character.player_id) + '#_')) |
+            (Characters.player_id == self._character.player_id)
+        )
+        query = session.query(Characters).filter(filter).order_by(Characters.player_id)
         return tuple(c for c in query.all())
 
     @property
     def user(self):
-        return session.query(Users).filter_by(funcom_id==self.funcom_id).first()
+        return session.query(Users).filter_by(funcom_id=self.funcom_id).first()
 
     def __repr__(self):
         return f"<Account(player_id='{self.player_id}', funcom_id='{self.funcom_id}')>"
+
 
 class ActorPosition(GameBase):
     __tablename__ = 'actor_position'
@@ -924,6 +1005,7 @@ class ActorPosition(GameBase):
     def __repr__(self):
         return f"<ActorPosition(id={self.id}, class='{self.class_}')>"
 
+
 class BuildableHealth(GameBase):
     __tablename__ = 'buildable_health'
     __table_args__ = {'autoload': True}
@@ -934,7 +1016,9 @@ class BuildableHealth(GameBase):
     template_id = Column(Integer, primary_key=True)
 
     def __repr__(self):
-        return f"<BuildableHealth(object_id={self.object_id}, instance_id={self.instance_id}, template_id={self.template_id})>"
+        tid = self.template_id
+        return f"<BuildableHealth(object_id={self.object_id}, instance_id={self.instance_id}, template_id={tid})>"
+
 
 class BuildingInstances(GameBase):
     __tablename__ = 'building_instances'
@@ -947,6 +1031,7 @@ class BuildingInstances(GameBase):
 
     def __repr__(self):
         return f"<BuildingInstances(object_id={self.object_id}, instance_id={self.instance_id}, class='{self.class_}')>"
+
 
 class Buildings(GameBase):
     __tablename__ = 'buildings'
@@ -977,7 +1062,7 @@ class Buildings(GameBase):
         for c in loc:
             if not isinstance(loc, ITER) or len(c) != 2 or not isinstance(c[0], NUMBER) or not isinstance(c[1], NUMBER):
                 return False
-            if  c[0] > c[1]:
+            if c[0] > c[1]:
                 return False
         return True
 
@@ -1084,9 +1169,9 @@ class Buildings(GameBase):
 
         # Try to get engine for the destination db
         try:
-            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            dest_db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
             engine = create_engine(dest_db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open destination DB at {dest_db_uri}.")
             return None
 
@@ -1114,28 +1199,29 @@ class Buildings(GameBase):
                 thrall_ids = f"NOT IN ({', '.join(thrall_id_list)})"
 
         # do the actual copying
-        slf, wobi, wowi = "SELECT * FROM", "WHERE object_id IN", "WHERE owner_id IN"
+        slf, wobi, wowi, ri = "SELECT * FROM", "WHERE object_id IN", "WHERE owner_id IN", "REPLACE INTO"
+        oo = "OR object_id"
         source_db_path = SAVED_DIR_PATH + '/' + source_db
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
             # Delete conflicting objects in the destination db if they exist
-            conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"DELETE FROM buildable_health {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"DELETE FROM building_instances {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"DELETE FROM destruction_history {wobi} ({obj_ids}) {oo} {thrall_ids}")
             conn.execute(f"DELETE FROM item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
             conn.execute(f"DELETE FROM item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
-            conn.execute(f"DELETE FROM properties {wobi} ({obj_ids}) OR object_id {thrall_ids}")
+            conn.execute(f"DELETE FROM properties {wobi} ({obj_ids}) {oo} {thrall_ids}")
             conn.execute(f"DELETE FROM actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
             conn.execute(f"DELETE FROM buildings {wobi} ({obj_ids})")
             # copy the objects from the source db into the destination db
-            conn.execute(f"REPLACE INTO buildable_health {slf} src.buildable_health {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO building_instances {slf} src.building_instances {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO destruction_history {slf} src.destruction_history {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO item_inventory {slf} src.item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO item_properties {slf} src.item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO properties {slf} src.properties {wobi} ({obj_ids}) OR object_id {thrall_ids}")
-            conn.execute(f"REPLACE INTO actor_position {slf} src.actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
-            conn.execute(f"REPLACE INTO buildings {slf} src.buildings {wobi} ({obj_ids})")
+            conn.execute(f"{ri} buildable_health {slf} src.buildable_health {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"{ri} building_instances {slf} src.building_instances {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"{ri} destruction_history {slf} src.destruction_history {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"{ri} item_inventory {slf} src.item_inventory {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"{ri} item_properties {slf} src.item_properties {wowi} ({obj_ids}) OR owner_id {thrall_ids}")
+            conn.execute(f"{ri} properties {slf} src.properties {wobi} ({obj_ids}) {oo} {thrall_ids}")
+            conn.execute(f"{ri} actor_position {slf} src.actor_position WHERE id IN ({obj_ids}) OR id {thrall_ids}")
+            conn.execute(f"{ri} buildings {slf} src.buildings {wobi} ({obj_ids})")
 
         with engine.begin() as conn:
             conn.execute("VACUUM")
@@ -1150,9 +1236,9 @@ class Buildings(GameBase):
 
         # Try to get engine for the db
         try:
-            db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + db
+            db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + db
             engine = create_engine(db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open DB at {db_uri}.")
             return None
 
@@ -1213,6 +1299,7 @@ class Buildings(GameBase):
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
 
+
 class CharacterStats(GameBase):
     __tablename__ = 'character_stats'
     __table_args__ = {'autoload': True}
@@ -1223,6 +1310,7 @@ class CharacterStats(GameBase):
 
     def __repr__(self):
         return f"<CharacterStats(char_id={self.char_id}, stat_id={self.stat_id})>"
+
 
 class Guilds(GameBase, Owner):
     __tablename__ = 'guilds'
@@ -1261,7 +1349,7 @@ class Guilds(GameBase, Owner):
         return False
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):
+    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
@@ -1290,14 +1378,23 @@ class Guilds(GameBase, Owner):
                     if isinstance(owner_ids, int):
                         return f"WHERE {key} IN ({slcid} WHERE guild={owner_ids}) OR {key} IN ({iter2str(char_ids)})"
                     elif isinstance(owner_ids, ITER):
-                        return f"WHERE {key} IN ({slcid} WHERE guild IN ({iter2str(owner_ids)})) OR {key} IN ({iter2str(char_ids)})"
+                        return (
+                            f"WHERE {key} IN ({slcid} "
+                            f"WHERE guild IN ({iter2str(owner_ids)})) OR {key} IN ({iter2str(char_ids)})"
+                        )
                 else:
                     if isinstance(owner_ids, int):
-                        return (f"WHERE {key} NOT IN ({slcid} WHERE (guild={owner_ids} OR {key} IN ({iter2str(char_ids)}))) "
-                                f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
+                        return (
+                            f"WHERE {key} NOT IN ({slcid} "
+                            f"WHERE (guild={owner_ids} OR {key} IN ({iter2str(char_ids)}))) "
+                            f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)"
+                        )
                     elif isinstance(owner_ids, ITER):
-                        return (f"WHERE {key} NOT IN ({slcid} WHERE guild IN ({iter2str(owner_ids)}) OR {key} IN ({iter2str(char_ids)})) "
-                                f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)")
+                        return (
+                            f"WHERE {key} NOT IN ({slcid} "
+                            f"WHERE guild IN ({iter2str(owner_ids)}) OR {key} IN ({iter2str(char_ids)})) "
+                            f"AND {key} IN ({slcid} WHERE guild IS NOT NULL)"
+                        )
             else:
                 return f"WHERE {key} IN ({slcid} WHERE {key} IN ({iter2str(char_ids)}) AND guild IS NOT NULL)"
 
@@ -1308,9 +1405,9 @@ class Guilds(GameBase, Owner):
 
         # Try to get engine for the destination db
         try:
-            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            dest_db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
             engine = create_engine(dest_db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open destination DB at {dest_db_uri}.")
             return None
 
@@ -1330,8 +1427,9 @@ class Guilds(GameBase, Owner):
             if with_chars:
                 char_ids = []
                 # Get the account ids (playerId) for all characters getting copied
-                conn.execute("CREATE TEMPORARY TABLE acc AS "
-                            f"SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}")
+                conn.execute(
+                    f"CREATE TEMPORARY TABLE acc AS SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}"
+                )
                 if with_alts:
                     query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
                     char_ids = tuple(id for id, in query.all())
@@ -1359,6 +1457,7 @@ class Guilds(GameBase, Owner):
 
     def __repr__(self):
         return f"<Guilds(id={self.id}, name='{self.name}')>"
+
 
 class Characters(GameBase, Owner):
     __tablename__ = 'characters'
@@ -1405,14 +1504,14 @@ class Characters(GameBase, Owner):
 
     @property
     def has_guild(self):
-        return not self.guild_id is None
+        return self.guild_id is not None
 
     @property
     def rank_name(self):
         if not type(self.rank) is int:
             return None
         # some entries seem to be buggy and outside of the normal 0-3 range
-        elif not self.rank in (0, 1, 2, 3):
+        elif self.rank not in (0, 1, 2, 3):
             return RANKS[3]
         return RANKS[self.rank]
 
@@ -1430,7 +1529,7 @@ class Characters(GameBase, Owner):
         users = []
         for char in results:
             user = session.query(Users).filter_by(funcom_id=char.account.funcom_id).first()
-            users += [user] if user and not user in users else []
+            users += [user] if user and user not in users else []
         return users
 
     @staticmethod
@@ -1443,21 +1542,21 @@ class Characters(GameBase, Owner):
             # if char is the last character in its guild also remove the guild
             if char.guild and len(char.guild.members) == 1:
                 session.delete(char.guild)
-            filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id==player_id)
+            filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id == player_id)
             # if char is the last character with the given player_id also remove it from the account table
             num = session.query(func.count(Characters.id)).filter(filter).order_by(Characters.id).scalar()
             if num == 1:
                 acc = session.query(Account).filter_by(player_id=player_id).first()
                 if acc:
                     session.delete(acc)
-
-        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session='fetch')
-        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session='fetch')
+        f = 'fetch'
+        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session=f)
         if autocommit:
             session.commit()
 
@@ -1515,9 +1614,9 @@ class Characters(GameBase, Owner):
 
         # Try to get engine for the destination db
         try:
-            dest_db_uri =  "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
+            dest_db_uri = "sqlite:///" + SAVED_DIR_PATH + '/' + dest_db
             engine = create_engine(dest_db_uri, echo=ECHO)
-        except:
+        except Exception:
             print(f"Couldn't open destination DB at {dest_db_uri}.")
             return None
 
@@ -1528,8 +1627,9 @@ class Characters(GameBase, Owner):
         with engine.begin() as conn:
             conn.execute(f"ATTACH DATABASE '{source_db_path}' AS 'src'")
             # Get the account ids (playerId) for all characters getting copied
-            conn.execute("CREATE TEMPORARY TABLE acc AS "
-                        f"SELECT DISTINCT {acc_id} FROM src.characters {owner_filter('id')}")
+            conn.execute(
+                f"CREATE TEMPORARY TABLE acc AS SELECT DISTINCT {acc_id} FROM src.characters {owner_filter('id')}"
+            )
             # Extend owner_ids to all chars with a matching account id
             if with_alts:
                 query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
@@ -1560,6 +1660,7 @@ class Characters(GameBase, Owner):
     def __repr__(self):
         return f"<Characters(id={self.id}, name='{self.name}')>"
 
+
 class DestructionHistory(GameBase):
     __tablename__ = 'destruction_history'
     __table_args__ = {'autoload': True}
@@ -1573,6 +1674,7 @@ class DestructionHistory(GameBase):
     def __repr__(self):
         return f"<FollowerMarkers(owner_id={self.owner_id}, follower_id={self.follower_id})>"
 
+
 class FollowerMarkers(GameBase):
     __tablename__ = 'follower_markers'
     __table_args__ = {'autoload': True}
@@ -1583,6 +1685,7 @@ class FollowerMarkers(GameBase):
 
     def __repr__(self):
         return f"<FollowerMarkers(owner_id={self.owner_id}, follower_id={self.follower_id})>"
+
 
 class GameEvents(GameBase):
     __tablename__ = 'game_events'
@@ -1596,6 +1699,7 @@ class GameEvents(GameBase):
     def __repr__(self):
         return f"<GameEvents(world_time={self.world_time}, event_type={self.event_type}, object_id={self.object_id})>"
 
+
 class ItemInventory(GameBase):
     __tablename__ = 'item_inventory'
     __table_args__ = {'autoload': True}
@@ -1608,7 +1712,8 @@ class ItemInventory(GameBase):
     def remove(template_ids=None, autocommit=True):
         if not isinstance(template_ids, ITER):
             template_ids = (template_ids,)
-        session.query(ItemInventory).filter(ItemInventory.template_id.in_(template_ids)).delete(synchronize_session='fetch')
+        f = 'fetch'
+        session.query(ItemInventory).filter(ItemInventory.template_id.in_(template_ids)).delete(synchronize_session=f)
         if autocommit:
             session.commit()
 
@@ -1626,6 +1731,7 @@ class ItemInventory(GameBase):
     def __repr__(self):
         return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id})>"
 
+
 class ItemProperties(GameBase):
     __tablename__ = 'item_properties'
     __table_args__ = {'autoload': True}
@@ -1637,6 +1743,7 @@ class ItemProperties(GameBase):
 
     def __repr__(self):
         return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id}, inv_type={self.inv_type})>"
+
 
 class Properties(GameBase):
     __tablename__ = 'properties'
@@ -1730,7 +1837,7 @@ class Properties(GameBase):
             for p in session.query(Properties).filter(name_filter).all():
                 nam = Properties._get_name(p)
                 if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
-                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID"))
+                    owner_filter = (Properties.object_id == p.object_id) & (Properties.name.like("%OwnerUniqueID"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
                         owners[nam] = {"owner": po.owner, "object_id": p.object_id}
@@ -1738,9 +1845,8 @@ class Properties(GameBase):
             # get owners for thralls with default names
             for p in session.query(Properties).filter(info_filter).all():
                 nam = Properties._get_name(p, names)
-                n = nam if nam else "None"
                 if nam and ((strict and name.lower() == nam.lower()) or (not strict and name.lower() in nam.lower())):
-                    owner_filter = (Properties.object_id==p.object_id) & (Properties.name.like("%OwnerUniqueID"))
+                    owner_filter = (Properties.object_id == p.object_id) & (Properties.name.like("%OwnerUniqueID"))
                     po = session.query(Properties).filter(owner_filter).first()
                     if po:
                         owners[nam] = {"owner": po.owner, "object_id": p.object_id}
@@ -1811,15 +1917,15 @@ class Properties(GameBase):
             if with_thespians:
                 query = (
                     session.query(Properties).
-                        filter(Buildings.object_id==Properties.object_id).
-                        filter(Buildings.owner_id==char_id).
-                        filter(Properties.name==p_name)
+                    filter(Buildings.object_id == Properties.object_id).
+                    filter(Buildings.owner_id == char_id).
+                    filter(Properties.name == p_name)
                 )
                 # for each thespian owned by the char add their money to the chars own money
                 for p in query.all():
                     add_money = get_money(p)
                     money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
-        
+
         # if guild_id is known determine Pippi money for that guild
         elif guild_id:
             # initialise money variable with 0
@@ -1840,9 +1946,9 @@ class Properties(GameBase):
             if with_thespians:
                 query = (
                     session.query(Properties).
-                        filter(Buildings.object_id==Properties.object_id).
-                        filter(Buildings.owner_id==guild_id).
-                        filter(Properties.name==p_name)
+                    filter(Buildings.object_id == Properties.object_id).
+                    filter(Buildings.owner_id == guild_id).
+                    filter(Properties.name == p_name)
                 )
                 # for each thespian owned by the char add their money to the chars own money
                 for p in query.all():
@@ -1865,7 +1971,7 @@ class Properties(GameBase):
         if not isinstance(object_ids, ITER):
             object_ids = (object_ids,)
         for object_id in object_ids:
-            filter = (Properties.object_id==object_id) & (Properties.name.like('%OwnerUniqueId'))
+            filter = (Properties.object_id == object_id) & (Properties.name.like('%OwnerUniqueId'))
             p = session.query(Properties).filter(filter).first()
             o = Owner.exists(owner_id)
             if not (p and o):
@@ -1911,6 +2017,7 @@ class Properties(GameBase):
     def __repr__(self):
         return f"<Properties(object_id={self.object_id}, name='{self.name}')>"
 
+
 class Purgescores(GameBase):
     __tablename__ = 'purgescores'
     __table_args__ = {'autoload': True}
@@ -1921,6 +2028,7 @@ class Purgescores(GameBase):
     def __repr__(self):
         return f"<Purgescores(purge_id={self.purge_id})>"
 
+
 class ServerPopulationRecordings(GameBase):
     __tablename__ = 'serverPopulationRecordings'
     __table_args__ = {'autoload': True}
@@ -1930,6 +2038,7 @@ class ServerPopulationRecordings(GameBase):
 
     def __repr__(self):
         return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
+
 
 # supplemental.db
 class Users(UsersBase):
@@ -1951,9 +2060,10 @@ class Users(UsersBase):
     def characters(self):
         player_id = str(self.get_player_id(self.funcom_id))
         characters = CharList(c for c in session.query(Characters)
-                                                .filter(Characters.player_id.like(player_id + '#_') |
-                                                       (Characters.player_id==player_id))
-                                                .order_by(Characters.player_id).all())
+                                                .filter(
+                                                    Characters.player_id.like(player_id + '#_') |
+                                                    (Characters.player_id == player_id)
+                                                ).order_by(Characters.player_id).all())
         return characters
 
     @staticmethod
@@ -1969,7 +2079,7 @@ class Users(UsersBase):
                 return [result]
             return []
         elif len(value) > 5 and value[-5] == '#':
-            result = session.query(Users).filter(Users.disc_user.collate('NOCASE')==value).first()
+            result = session.query(Users).filter(Users.disc_user.collate('NOCASE') == value).first()
             if result:
                 return [result]
         result = session.query(Users).filter(Users.disc_user.like((value + '#____'))).first()
@@ -1983,16 +2093,19 @@ class Users(UsersBase):
     @staticmethod
     def get_disc_users(value):
         if len(value) > 5 and value[-5] == '#':
-            result = session.query(Users.disc_user).filter(Users.disc_user.collate('NOCASE')==value).first()
+            result = session.query(Users.disc_user).filter(Users.disc_user.collate('NOCASE') == value).first()
             if result:
                 return result[0]
         result = session.query(Users.disc_user).filter(Users.disc_user.like((value + '#____'))).first()
         if result:
             return result[0]
-        results = tuple(u[0] for u in session.query(Users.disc_user).filter(Users.disc_user.like(('%' + value + '%#____'))).all())
+        results = tuple(
+            u[0] for u in session.query(Users.disc_user).filter(Users.disc_user.like(('%' + value + '%#____'))).all()
+        )
         if results:
             return results[0] if len(results) == 1 else results
         return None
+
 
 class OwnersCache(UsersBase, Owner):
     __tablename__ = 'owners_cache'
@@ -2002,24 +2115,24 @@ class OwnersCache(UsersBase, Owner):
     name = Column(Text, nullable=False)
 
     def __init__(self, *args, **kwargs):
-        if kwargs.get('id') == None:
+        if kwargs.get('id') is None:
             raise ValueError("Missing argument 'id' to initialize OwnersCache")
         super().__init__(*args, **kwargs)
 
     @staticmethod
     def update(ruins_clan_id=11, autocommit=True):
         owners = cache = {}
-        results = session.query(Guilds.id, Guilds.name).filter(Guilds.name!='Ruins').all()
+        results = session.query(Guilds.id, Guilds.name).filter(Guilds.name != 'Ruins').all()
         owners = {owner[0]: owner[1] for owner in results}
-        results = session.query(Characters.id, Characters.name).filter(Characters.name!='Ruins').all()
+        results = session.query(Characters.id, Characters.name).filter(Characters.name != 'Ruins').all()
         owners.update({owner[0]: owner[1] for owner in results})
         cache = {owner.id: owner.name for owner in session.query(OwnersCache).all()}
         if 0 not in owners:
             owners[0] = 'Game Assets'
-        if not ruins_clan_id in owners:
+        if ruins_clan_id not in owners:
             owners[ruins_clan_id] = 'Ruins'
         for id, name in owners.items():
-            if not id in cache:
+            if id not in cache:
                 new_owner = OwnersCache(id=id, name=name)
                 session.add(new_owner)
             elif cache[id] != owners[id]:
@@ -2031,6 +2144,7 @@ class OwnersCache(UsersBase, Owner):
     def __repr__(self):
         return f"<OwnersCache(id={self.id}, name='{self.name}')>"
 
+
 class ObjectsCache(UsersBase):
     __tablename__ = 'objects_cache'
     __bind_key__ = 'usersdb'
@@ -2039,7 +2153,7 @@ class ObjectsCache(UsersBase):
     _timestamp = Column('timestamp', Integer, nullable=False)
 
     def __init__(self, *args, **kwargs):
-        if kwargs.get('id') == None:
+        if kwargs.get('id') is None:
             raise ValueError("Missing argument 'id' to initialize ObjectsCache")
         if ous := kwargs.get('owner_unknown_since'):
             self.owner_unknown_since = ous
@@ -2058,12 +2172,12 @@ class ObjectsCache(UsersBase):
             (Buildings.owner_id == ruins_clan_id)).all()}
         cache = {obj.id: obj.owner_unknown_since for obj in session.query(ObjectsCache).all()}
         for id, dt in cache.items():
-            if not id in objects:
+            if id not in objects:
                 del_obj = session.query(ObjectsCache).get(id)
                 session.delete(del_obj)
         now = int(datetime.utcnow().timestamp())
         for id in objects:
-            if not id in cache:
+            if id not in cache:
                 new_obj = ObjectsCache(id=id, _timestamp=now)
                 session.add(new_obj)
         if autocommit:
@@ -2082,6 +2196,7 @@ class ObjectsCache(UsersBase):
 
     def __repr__(self):
         return f"<ObjectsCache(id={self.id}, owner_unknown_since='{self.owner_unknown_since}')>"
+
 
 class DeleteChars(UsersBase):
     __tablename__ = 'delete_chars'
@@ -2104,6 +2219,7 @@ class DeleteChars(UsersBase):
 
     def __repr__(self):
         return f"<DeleteChars(id={self.id}, player_id='{self.player_id}', name='{self.name}')>"
+
 
 class GlobalVars(UsersBase):
     __tablename__ = 'global_vars'
@@ -2133,22 +2249,23 @@ class GlobalVars(UsersBase):
     def __repr__(self):
         return f"<GlobalVars(id={self.id}, name='{self.name}', value='{self.value}')>"
 
+
 class Applications(UsersBase):
     __tablename__ = 'applications'
     __bind_key__ = 'usersdb'
 
-    id               = Column(Integer, primary_key=True, nullable=False)
-    disc_id          = Column(String(18), unique=True, nullable=False)
-    status           = Column(String, nullable=False, default='open')
-    funcom_id_row    = Column(Integer, default=None)
+    id = Column(Integer, primary_key=True, nullable=False)
+    disc_id = Column(String(18), unique=True, nullable=False)
+    status = Column(String, nullable=False, default='open')
+    funcom_id_row = Column(Integer, default=None)
     current_question = Column(Integer, default=1)
-    open_date        = Column(DateTime, default=datetime.utcnow())
+    open_date = Column(DateTime, default=datetime.utcnow())
 
     def __init__(self, disc_id, *args, **kwargs):
         kwargs['disc_id'] = disc_id
         for q in session.query(BaseQuestions).all():
             if q.has_funcom_id:
-                self.funcom_id_row=q.id
+                self.funcom_id_row = q.id
             session.add(Questions(qnum=q.id, question=q.txt, answer='', application=self))
         super().__init__(*args, **kwargs)
 
@@ -2166,6 +2283,7 @@ class Applications(UsersBase):
     def __repr__(self):
         return f"<Applications(id={self.id}, disc_id='{self.disc_id}', status='{self.status}')>"
 
+
 class Questions(UsersBase):
     __tablename__ = 'questions'
     __bind_key__ = 'usersdb'
@@ -2181,6 +2299,7 @@ class Questions(UsersBase):
     def __repr__(self):
         return f"<Qustions(id={self.id}, qnum={self.qnum})>"
 
+
 class BaseQuestions(UsersBase):
     __tablename__ = 'base_questions'
     __bind_key__ = 'usersdb'
@@ -2191,6 +2310,7 @@ class BaseQuestions(UsersBase):
 
     def __repr__(self):
         return f"<BaseQuestions(id={self.id})>"
+
 
 class TextBlocks(UsersBase):
     __tablename__ = 'text_blocks'
@@ -2220,6 +2340,7 @@ class TextBlocks(UsersBase):
     def __repr__(self):
         return f"<TextBlocks(id={self.id}, name='{self.name}', content='{self.content}')>"
 
+
 class MagicChars(UsersBase):
     __tablename__ = 'magic_chars'
     __bind_key__ = 'usersdb'
@@ -2235,6 +2356,7 @@ class MagicChars(UsersBase):
     def __repr__(self):
         return f"<MagicUsers(id={self.id}, name='{self.name}', mana={self.mana}, active='{self.active}')>"
 
+
 class Categories(UsersBase):
     __tablename__ = 'categories'
     __bind_key__ = 'usersdb'
@@ -2243,7 +2365,7 @@ class Categories(UsersBase):
     name = Column(String)
     cmd = Column(String, nullable=False)
     frequency = Column(Interval, default=timedelta(days=7))
-    start = Column(String, default=datetime.utcnow().strftime('%A') +' 00:00')
+    start = Column(String, default=datetime.utcnow().strftime('%A') + ' 00:00')
     fee = Column(Integer, default=1)
     verbosity = Column(Integer, default=1)
     guild_pay = Column(Boolean, default=False)
@@ -2263,7 +2385,7 @@ class Categories(UsersBase):
             t = t.split(':')
             hour = t[0] if int(t[0]) >= 0 and int(t[0]) < 24 else 0
             minute = t[1] if int(t[1]) >= 0 and int(t[1]) < 60 else 0
-        except:
+        except Exception:
             d = now.strftime('%A')
             hour, minute = '00', '00'
         return d + ' ' + hour.zfill(2) + ':' + minute.zfill(2)
@@ -2278,6 +2400,7 @@ class Categories(UsersBase):
     def __repr__(self):
         return f"<Categories(id={self.id}, name='{self.name}' cmd='{self.cmd}')>"
 
+
 class CatOwners(UsersBase):
     __tablename__ = 'cat_owners'
     __bind_key__ = 'usersdb'
@@ -2291,7 +2414,7 @@ class CatOwners(UsersBase):
         if not ('group' in kwargs or 'group_id' in kwargs) and not ('category' in kwargs or 'category_id' in kwargs):
             raise SQLAlchemyError("Initialization requires either a group or a category.")
         elif not ('group' in kwargs or 'group_id' in kwargs):
-            if not 'next_due' in kwargs:
+            if 'next_due' not in kwargs:
                 cat = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
                 kwargs['next_due'] = next_time(cat.start) if cat and cat.start else datetime.utcnow()
             kwargs['group'] = Groups(name=kwargs.get('name'), next_due=kwargs['next_due'], category=cat)
@@ -2360,6 +2483,7 @@ class CatOwners(UsersBase):
     def __repr__(self):
         return f"<CatOwners(id={self.id}, group_id={self.group_id})>"
 
+
 class Groups(UsersBase):
     __tablename__ = 'groups'
     __bind_key__ = 'usersdb'
@@ -2375,7 +2499,7 @@ class Groups(UsersBase):
     category = relationship("Categories", back_populates="groups")
 
     def __init__(self, *args, **kwargs):
-        if not 'next_due' in kwargs:
+        if 'next_due' not in kwargs:
             cat = kwargs.get('category')
             if not cat:
                 cat = session.query(Categories).get(kwargs['category_id'])
@@ -2401,9 +2525,9 @@ class Groups(UsersBase):
     def is_simple(self):
         return False if self._name else True
 
-
     def __repr__(self):
         return f"<Groups(id={self.id}, name='{self.name}')>"
+
 
 class Boatbucks(UsersBase):
     __tablename__ = 'boatbucks'
@@ -2414,6 +2538,7 @@ class Boatbucks(UsersBase):
 
     def __repr__(self):
         return f"<Boatbucks(id={self.id}, bucks={self.bucks})>"
+
 
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
