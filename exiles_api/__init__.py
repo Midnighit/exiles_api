@@ -789,8 +789,7 @@ class Stats:
 
         # res has format: (object_id, owner_id) contains all building tiles and placeables
         filter = (Buildings.object_id == ActorPosition.id)
-        query = (Buildings.object_id, Buildings.owner_id)
-        for res in session.query(query).filter(filter).all():
+        for res in session.query(Buildings.object_id, Buildings.owner_id).filter(filter).all():
             # if object is not a root object, it is a placeable and needs to be added now
             if not res[0] in root:
                 # create a new dict entry if owner does not have one yet
