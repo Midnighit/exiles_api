@@ -806,23 +806,23 @@ class Stats:
         nm, nam = 'numMembers', 'numActiveMembers'
 
         # active guilds with more than one member
-        active_guilds = dict(filter(lambda m: m[1][nm] > 1 and m[1][nam] >= 1, members.items()))
+        active_guilds = {id: m for id, m in members.items() if m[nm] > 1 and m[nam] >= 1}
         tiles_active_guilds = {id: tiles[id] if id in tiles else 0 for id in active_guilds}
 
         # inactive guilds with more than one member
-        inactive_guilds = dict(filter(lambda m: m[1][nm] > 1 and m[1][nam] == 0, members.items()))
+        inactive_guilds = {id: m for id, m in members.items() if m[nm] > 1 and m[nam] == 0}
         tiles_inactive_guilds = {id: tiles[id] if id in tiles else 0 for id in inactive_guilds}
 
         # active characters without guilds or in guilds with one member only
-        active_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1][nam] == 1, members.items()))
+        active_chars_no_guild = {id: m for id, m in members.items() if m[nm] == 1 and m[nam] == 1}
         tiles_active_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in active_chars_no_guild}
 
         # inactive characters without guilds or in guilds with one member only
-        inactive_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1][nam] == 0, members.items()))
+        inactive_chars_no_guild = {id: m for id, m in members.items() if m[nm] == 1 and m[nam] == 0}
         tiles_inactive_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in inactive_chars_no_guild}
 
         # active characters regardless of guild status
-        active_chars = dict(filter(lambda m: m[1][nam] >= 1, members.items()))
+        active_chars = {id: m for id, m in members.items() if m[nm] >= 1}
         tiles_active_chars = {id: tiles[id] if id in tiles else 0 for id in active_chars}
 
         # inactive characters regardless of guild status
@@ -830,15 +830,15 @@ class Stats:
         tiles_inactive_chars = {id: tiles[id] if id in tiles else 0 for id in inactive_chars}
 
         # single characters or guilds with one member named ruins
-        ruin_chars_no_guild = dict(filter(lambda m: m[1][nm] == 1 and m[1]['name'] == "Ruins", members.items()))
+        ruin_chars_no_guild = {id: m for id, m in members.items() if m[nm] == 1 and m['name'] == "Ruins"}
         tiles_ruin_chars_no_guild = {id: tiles[id] if id in tiles else 0 for id in ruin_chars_no_guild}
 
         # guilds with more than one member named ruins
-        ruin_chars_guild = dict(filter(lambda m: m[1][nm] > 1 and m[1]['name'] == "Ruins", members.items()))
+        ruin_chars_guild = {id: m for id, m in members.items() if m[nm] > 1 and m['name'] == "Ruins"}
         tiles_ruin_chars_guild = {id: tiles[id] if id in tiles else 0 for id in ruin_chars_guild}
 
         # ruins regardless of whether they're owned by a guild or a character
-        ruins = dict(filter(lambda m: m[1]['name'] == "Ruins", members.items()))
+        ruins = {id: m for id, m in members.items() if m['name'] == "Ruins"}
         tiles_ruins = {id: tiles[id] if id in tiles else 0 for id in ruins}
 
         # tiles that have no owner
