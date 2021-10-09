@@ -371,8 +371,7 @@ class Tiles:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        if not isinstance(object_ids, ITER):
-            obj = (object_ids,)
+        obj = (object_ids,) if not isinstance(object_ids, ITER) else object_ids
         f = 'fetch'
         session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(obj)).delete(synchronize_session=f)
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(obj)).delete(synchronize_session=f)
