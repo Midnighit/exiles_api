@@ -1,6 +1,7 @@
 import os
 import json
 import warnings
+from psutil import process_iter
 from statistics import median, mean
 from math import floor, ceil, sqrt
 from struct import pack, unpack
@@ -11,9 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean, Interval
-from config import (
-    GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH
-)
+from config import GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH, EXE_DIR_PATH
 
 GameBase = declarative_base()
 UsersBase = declarative_base()
@@ -35,9 +34,61 @@ Session = sessionmaker(class_=RoutingSession)
 session = Session()
 GameBase.metadata = metadata
 
+# needs to be set from the importing module to be used
+mcr = None
+
 RANKS = ('Recruit', 'Member', 'Officer', 'Guildmaster')
 ITER = (list, tuple, set)
 NUMBER = (int, float)
+
+
+def is_running(process_name="ConanSandboxServer", strict=False):
+    """Check if there is any running process that contains the given name process_name."""
+    # Iterate over the all the running process
+    for proc in process_iter():
+        try:
+            # Check if process name partially or completely matches the given name string.
+            if (not strict and process_name.lower() in proc.name().lower()) or (strict and process_name == proc.name()):
+                # Check if the process is running the correct directory
+                if os.path.realpath(proc.exe()).startswith(os.path.realpath(EXE_DIR_PATH)):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+def allows_login():
+    """
+    Returns True if logfile indicates that logging in should be possible.
+    """
+
+    if not is_running():
+        return False
+
+    try:
+        path = os.path.join(SAVED_DIR_PATH, "Logs", "ConanSandbox.log")
+        with open(path) as logfile:
+            contents = logfile.read()
+            startup_msg = "LogLoad: (Engine Initialization)"
+            shutdown_msg = "LogExit: GameNetDriver IpNetDriver_0 shut down"
+            if startup_msg in contents and shutdown_msg not in contents:
+                return True
+            return False
+    except Exception:
+        return False
+
+
+def get_raw_sql(query):
+    return str(query.statement.compile(compile_kwargs={"literal_binds": True}))
+
+
+def use_rcon_sql(statement):
+    try:
+        command = f"sql {statement}"
+        # print(command)
+        return mcr.command(command)
+    except Exception as err:
+        return err
 
 
 def db_date():
@@ -466,7 +517,7 @@ class PropertiesList(tuple):
     def owner_id(self):
         for p in self:
             if "OwnerUniqueID" in p.name:
-                return unpack("<Q", p.value[-8:])[0]
+                return unpack("<q", p.value[-8:])[0]
         return None
 
     @property
@@ -1465,7 +1516,8 @@ class Characters(GameBase, Owner):
     id = Column(Integer, primary_key=True, nullable=False)
     player_id = Column('playerId', Text, nullable=False)
     guild_id = Column('guild', Integer, ForeignKey('guilds.guildId'))
-    name = Column('char_name', Text, nullable=False)
+    _name = Column('char_name', Text, nullable=False)
+    _rank = Column('rank', Integer)
     _last_login = Column('lastTimeOnline', Integer)
     # relationship
     guild = relationship('Guilds', backref="_members", foreign_keys=[guild_id])
@@ -1512,6 +1564,22 @@ class Characters(GameBase, Owner):
         elif self.rank not in (0, 1, 2, 3):
             return RANKS[3]
         return RANKS[self.rank]
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    @property
+    def rank(self):
+        return self._rank
+
+    @rank.setter
+    def rank(self, value):
+        self._rank = value
 
     @property
     def is_guild(self):
@@ -1806,7 +1874,7 @@ class Properties(GameBase):
 
         elif owner_id:
             for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID")).all():
-                own_id = unpack("<Q", p.value[-8:])[0]
+                own_id = unpack("<q", p.value[-8:])[0]
                 if owner_id == own_id:
                     objects.append(p.object_id)
         return objects
@@ -1852,7 +1920,7 @@ class Properties(GameBase):
         elif owner_id:
             owner = Owner.get(owner_id)
             for p in session.query(Properties).filter(Properties.name.like("%OwnerUniqueID")).all():
-                own_id = unpack("<Q", p.value[-8:])[0]
+                own_id = unpack("<q", p.value[-8:])[0]
                 if owner_id == own_id:
                     pl = PropertiesList(session.query(Properties).filter_by(object_id=p.object_id).all())
                     nam = pl.name
@@ -1991,13 +2059,13 @@ class Properties(GameBase):
     @property
     def owner_id(self):
         if "OwnerUniqueID" in self.name:
-            return unpack("<Q", self.value[-8:])[0]
+            return unpack("<q", self.value[-8:])[0]
         return None
 
     @owner_id.setter
     def owner_id(self, value):
         if "OwnerUniqueID" in self.name:
-            self.value = self.value[:-8] + pack("<Q", value)
+            self.value = self.value[:-8] + pack("<q", value)
 
     @property
     def owner(self):
@@ -2009,8 +2077,122 @@ class Properties(GameBase):
     @owner.setter
     def owner(self, value):
         if not isinstance(value, (Guilds, Characters)):
-            return None
+            return
         self.owner_id = value.id
+
+    @property
+    def money(self):
+        if not self.name == "Pippi_WalletComponent_C.walletAmount":
+            return None
+
+        gold = unpack('>Q', self.value[66:74])[0]
+        silver = unpack('>Q', self.value[141:149])[0]
+        bronze = unpack('>Q', self.value[216:224])[0]
+        return ((bronze / 100. + silver) / 100. + gold)
+
+    @money.setter
+    def money(self, value):
+        """
+        Tries to set the Pippi money value of the char owning this property row.
+        Setter prioritizes the Pippi internal method of giving money when the char is online and mcr has been set
+        but sets it directly via sql if character is not online or server isn't running.
+        Does nothing if char is online and no mcr is available.
+        """
+        # do nothing if row doesn't match
+        if not self.name == "Pippi_WalletComponent_C.walletAmount":
+            return
+
+        # only allow changing money for chars for the time being
+        # changing money for thespians will require to also change the transaction log
+        char = session.query(Characters).get(self.object_id)
+        if not char:
+            return
+
+        def num2tuple(num):
+            """
+            Will convert a tuple consisting of gold, silver and bronze values to a decimal number
+            """
+            gold = floor(num)
+            num = (num - gold) * 100
+            silver = floor(num)
+            bronze = round((num - silver) * 100)
+            return (gold, silver, bronze)
+
+        # this is the gold, silver and bronze that is supposed to be set
+        gold, silver, bronze = num2tuple(value)
+
+        # conver and add the gold, silver and bronze values into the blob that is used in the sql method
+        money = (
+            self.value[:66] + pack(">Q", gold) +
+            self.value[74:141] + pack(">Q", silver) +
+            self.value[149:216] + pack(">Q", bronze) +
+            self.value[224:]
+        )
+
+        # if the server is running a decision needs to be made between the Pippi rcon and the sql method
+        if is_running():
+            # we start with the assumption that the char is online and Pippi can find them
+            char_not_found = False
+            # keep the result of the allows_login check for later use
+            _allows_login = allows_login()
+            # if mcr is available, logging in is possible and char is online, try the Pippi method
+            if mcr and _allows_login and char.slot == "active" and char.account.online:
+
+                def set_with_rcon(change, name, amount, type):
+                    """
+                    Tries to use rcon to add or remove the given amount of money of the given type to the given char.
+                    If the try raises an exception, try again after another connect() attempt. If second attempt
+                    fails as well, return the error message to the caller.
+                    """
+                    try:
+                        result = mcr.command(f"Currency {change} {name} {amount} {type}")
+                        return result
+                    except Exception:
+                        try:
+                            mcr.connect()
+                            result = mcr.command(f"Currency {change} {name} {amount} {type}")
+                            return result
+                        except Exception as err:
+                            return str(err)
+
+                # if the rcon command is used, instead of setting an amount we add or remove a difference
+                diff_num = value - self.money
+                if diff_num >= 0:
+                    change = "add"
+                elif diff_num < 0:
+                    change = "remove"
+                    diff_num = abs(diff_num)
+
+                # save the difference in a dict that we can iterate over
+                diff_dict = {}
+                diff_dict["Gold"], diff_dict["Silver"], diff_dict["Bronze"] = num2tuple(abs(diff_num))
+
+                # try to set the gold, silver and bronze the owner
+                for type, amount in diff_dict.items():
+                    success_msg = (
+                        f"You gave {char.name} {amount} {type}",
+                        f"You removed {amount} {type} from {char.name}"
+                    )
+                    # result is either the rcon message or an exception error message
+                    result = set_with_rcon(change, char.name, amount, type)
+                    # if no player with that name was found they have to be offline and the sql method can be used
+                    if result.startswith("No players found with the name"):
+                        char_not_found = True
+                        break
+                    # if result is any other message that's not a success, do nothing
+                    elif result not in success_msg:
+                        return
+
+            # if char is not online it should be safe to set the money directly via sql
+            if (
+                char_not_found or char.slot != "active" or not _allows_login or
+                (_allows_login and char.slot == "active" and not char.account.online)
+            ):
+                self.value = money
+
+        # if the server is not running, money can be set safely via sql method
+        else:
+            self.value = money
 
     def __repr__(self):
         return f"<Properties(object_id={self.object_id}, name='{self.name}')>"
