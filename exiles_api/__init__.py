@@ -1516,7 +1516,7 @@ class Characters(GameBase, Owner):
     id = Column(Integer, primary_key=True, nullable=False)
     player_id = Column('playerId', Text, nullable=False)
     guild_id = Column('guild', Integer, ForeignKey('guilds.guildId'))
-    _name = Column('char_name', Text, nullable=False)
+    name = Column('char_name', Text, nullable=False)
     _rank = Column('rank', Integer)
     _last_login = Column('lastTimeOnline', Integer)
     # relationship
@@ -1564,14 +1564,6 @@ class Characters(GameBase, Owner):
         elif self.rank not in (0, 1, 2, 3):
             return RANKS[3]
         return RANKS[self.rank]
-
-    @property
-    def name(self):
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = value
 
     @property
     def rank(self):
