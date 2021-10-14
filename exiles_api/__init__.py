@@ -1844,6 +1844,12 @@ class Properties(GameBase):
         num = (num - gold) * 100
         silver = floor(num)
         bronze = round((num - silver) * 100)
+        if bronze >= 100:
+            bronze -= 100
+            silver += 1
+        if silver >= 100:
+            silver -= 100
+            gold += 1
         return (gold, silver, bronze)
 
     @staticmethod
