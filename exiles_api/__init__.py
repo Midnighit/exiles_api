@@ -1836,6 +1836,17 @@ class Properties(GameBase):
         return None
 
     @staticmethod
+    def num2tuple(num):
+        """
+        Will convert a decimal number to a tuple consisting of gold, silver and bronze values
+        """
+        gold = floor(num)
+        num = (num - gold) * 100
+        silver = floor(num)
+        bronze = round((num - silver) * 100)
+        return (gold, silver, bronze)
+
+    @staticmethod
     def get_thrall_object_ids(name=None, owner_id=None, strict=False):
         objects = []
         if name:
@@ -2100,18 +2111,8 @@ class Properties(GameBase):
         if not char:
             return
 
-        def num2tuple(num):
-            """
-            Will convert a tuple consisting of gold, silver and bronze values to a decimal number
-            """
-            gold = floor(num)
-            num = (num - gold) * 100
-            silver = floor(num)
-            bronze = round((num - silver) * 100)
-            return (gold, silver, bronze)
-
         # this is the gold, silver and bronze that is supposed to be set
-        gold, silver, bronze = num2tuple(value)
+        gold, silver, bronze = Properties.num2tuple(value)
 
         # conver and add the gold, silver and bronze values into the blob that is used in the sql method
         money = (
@@ -2157,7 +2158,7 @@ class Properties(GameBase):
 
                 # save the difference in a dict that we can iterate over
                 diff_dict = {}
-                diff_dict["Gold"], diff_dict["Silver"], diff_dict["Bronze"] = num2tuple(abs(diff_num))
+                diff_dict["Gold"], diff_dict["Silver"], diff_dict["Bronze"] = Properties.num2tuple(diff_num)
 
                 # try to set the gold, silver and bronze the owner
                 for type, amount in diff_dict.items():
