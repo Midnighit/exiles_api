@@ -1836,20 +1836,20 @@ class Properties(GameBase):
         return None
 
     @staticmethod
-    def num2tuple(num):
+    def tuple2bronze(tpl):
         """
-        Will convert a decimal number to a tuple consisting of gold, silver and bronze values
+        Will convert a tuple consisting of gold, silver and bronze values into a bronze value
         """
-        gold = floor(num)
-        num = (num - gold) * 100
-        silver = floor(num)
-        bronze = round((num - silver) * 100)
-        if bronze >= 100:
-            bronze -= 100
-            silver += 1
-        if silver >= 100:
-            silver -= 100
-            gold += 1
+        gold, silver, bronze = tpl
+        return ((gold * 100) + silver) * 100 + bronze
+
+    @staticmethod
+    def bronze2tuple(num):
+        """
+        Will convert a bronze value to a tuple consisting of gold, silver and bronze values
+        """
+        gold, remainder = divmod(num, 10000)
+        silver, bronze = divmod(remainder, 100)
         return (gold, silver, bronze)
 
     @staticmethod
@@ -1947,18 +1947,6 @@ class Properties(GameBase):
     @staticmethod
     def get_pippi_money(name=None, char_id=None, guild_id=None, with_chars=True, with_thespians=True, as_number=False):
 
-        # returns the money as number or tuple accounting for the possibility of no wallet as well
-        def get_money(properties):
-            # if wallet for owner was found unpack and return its value
-            if properties:
-                gold = unpack('>Q', properties.value[66:74])[0]
-                silver = unpack('>Q', properties.value[141:149])[0]
-                bronze = unpack('>Q', properties.value[216:224])[0]
-                return (gold, silver, bronze) if not as_number else ((bronze / 100. + silver) / 100. + gold)
-            # if no wallet exists return 0
-            else:
-                return (0, 0, 0) if not as_number else 0
-
         # if char_id was given, ensure that there's actually a character with that id.
         if char_id and not session.query(Characters).get(char_id):
             return None
@@ -1987,7 +1975,7 @@ class Properties(GameBase):
         if char_id:
             p = session.query(Properties).filter_by(object_id=char_id, name=p_name).first()
             # if owner exists but they don't have a wallet, return 0
-            money = get_money(p)
+            money = p.money if p else 0
             # if with_thespians is True include all thespians belonging to the character to the total Pippi money
             if with_thespians:
                 query = (
@@ -1998,7 +1986,7 @@ class Properties(GameBase):
                 )
                 # for each thespian owned by the char add their money to the chars own money
                 for p in query.all():
-                    add_money = get_money(p)
+                    add_money = p.money if p else 0
                     money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
 
         # if guild_id is known determine Pippi money for that guild
@@ -2027,17 +2015,14 @@ class Properties(GameBase):
                 )
                 # for each thespian owned by the char add their money to the chars own money
                 for p in query.all():
-                    add_money = get_money(p)
+                    add_money = p.money if p else 0
                     money = money + add_money if as_number else tuple(map(sum, zip(add_money, money)))
 
         # convert bronze to silver and silver to gold if money is returned as tupel
         if not as_number:
-            silver, bronze = divmod(money[2], 100)
-            gold, silver = divmod(money[1] + silver, 100)
-            gold = money[0] + gold
-            return (gold, silver, bronze)
+            return Properties.bronze2tuple(money)
         else:
-            return round(money, 4)
+            return money
 
     @staticmethod
     def give_thrall(object_ids, owner_id, autocommit=True):
@@ -2097,12 +2082,12 @@ class Properties(GameBase):
         gold = unpack('>Q', self.value[66:74])[0]
         silver = unpack('>Q', self.value[141:149])[0]
         bronze = unpack('>Q', self.value[216:224])[0]
-        return ((bronze / 100. + silver) / 100. + gold)
+        return Properties.tuple2bronze(gold, silver, bronze)
 
     @money.setter
     def money(self, value):
         """
-        Tries to set the Pippi money value of the char owning this property row.
+        Tries to set the Pippi money value as integer number of bronze of the char owning this property row.
         Setter prioritizes the Pippi internal method of giving money when the char is online and mcr has been set
         but sets it directly via sql if character is not online or server isn't running.
         Does nothing if char is online and no mcr is available.
@@ -2118,9 +2103,9 @@ class Properties(GameBase):
             return
 
         # this is the gold, silver and bronze that is supposed to be set
-        gold, silver, bronze = Properties.num2tuple(value)
+        gold, silver, bronze = Properties.bronze2tuple(value)
 
-        # conver and add the gold, silver and bronze values into the blob that is used in the sql method
+        # convert and add the gold, silver and bronze values into the blob that is used in the sql method
         money = (
             self.value[:66] + pack(">Q", gold) +
             self.value[74:141] + pack(">Q", silver) +
@@ -2137,19 +2122,19 @@ class Properties(GameBase):
             # if mcr is available, logging in is possible and char is online, try the Pippi method
             if mcr and _allows_login and char.slot == "active" and char.account.online:
 
-                def set_with_rcon(change, name, amount, type):
+                def set_with_rcon(change, name, amount):
                     """
-                    Tries to use rcon to add or remove the given amount of money of the given type to the given char.
+                    Tries to use rcon to add or remove the given amount of money to the given char.
                     If the try raises an exception, try again after another connect() attempt. If second attempt
                     fails as well, return the error message to the caller.
                     """
                     try:
-                        result = mcr.command(f"Currency {change} {name} {amount} {type}")
+                        result = mcr.command(f"Currency {change} {name} {amount} bronze")
                         return result
                     except Exception:
                         try:
                             mcr.connect()
-                            result = mcr.command(f"Currency {change} {name} {amount} {type}")
+                            result = mcr.command(f"Currency {change} {name} {amount} bronze")
                             return result
                         except Exception as err:
                             return str(err)
@@ -2162,25 +2147,18 @@ class Properties(GameBase):
                     change = "remove"
                     diff_num = abs(diff_num)
 
-                # save the difference in a dict that we can iterate over
-                diff_dict = {}
-                diff_dict["Gold"], diff_dict["Silver"], diff_dict["Bronze"] = Properties.num2tuple(diff_num)
-
-                # try to set the gold, silver and bronze the owner
-                for type, amount in diff_dict.items():
-                    success_msg = (
-                        f"You gave {char.name} {amount} {type}",
-                        f"You removed {amount} {type} from {char.name}"
-                    )
-                    # result is either the rcon message or an exception error message
-                    result = set_with_rcon(change, char.name, amount, type)
-                    # if no player with that name was found they have to be offline and the sql method can be used
-                    if result.startswith("No players found with the name"):
-                        char_not_found = True
-                        break
-                    # if result is any other message that's not a success, do nothing
-                    elif result not in success_msg:
-                        return
+                # we always use bronze to avoid multiple rcon commands
+                success_msg = (
+                    f"You gave {char.name} {diff_num:,} Bronze".replace(',', '.'),
+                    f"You removed {diff_num:,} Bronze from {char.name}".replace(',', '.')
+                )
+                # result is either the rcon message or an exception error message
+                result = set_with_rcon(change, char.name, diff_num)
+                if result.startswith("No players found with the name"):
+                    char_not_found = True
+                # if result is any other message that's not a success, do nothing
+                elif result not in success_msg:
+                    return
 
             # if char is not online it should be safe to set the money directly via sql
             if (
