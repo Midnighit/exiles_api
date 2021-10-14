@@ -2082,7 +2082,7 @@ class Properties(GameBase):
         gold = unpack('>Q', self.value[66:74])[0]
         silver = unpack('>Q', self.value[141:149])[0]
         bronze = unpack('>Q', self.value[216:224])[0]
-        return Properties.tuple2bronze(gold, silver, bronze)
+        return Properties.tuple2bronze((gold, silver, bronze))
 
     @money.setter
     def money(self, value):
