@@ -2079,9 +2079,9 @@ class Properties(GameBase):
         if not self.name == "Pippi_WalletComponent_C.walletAmount":
             return None
 
-        gold = unpack('@L', self.value[73:77])[0]
-        silver = unpack('@L', self.value[148:152])[0]
-        bronze = unpack('@L', self.value[223:227])[0]
+        gold = unpack('@l', self.value[73:77])[0]
+        silver = unpack('@l', self.value[148:152])[0]
+        bronze = unpack('@l', self.value[223:227])[0]
         return Properties.tuple2bronze((gold, silver, bronze))
 
     @money.setter
@@ -2107,9 +2107,9 @@ class Properties(GameBase):
 
         # convert and add the gold, silver and bronze values into the blob that is used in the sql method
         money = (
-            self.value[:73] + pack("@L", gold) +
-            self.value[77:148] + pack("@L", silver) +
-            self.value[152:223] + pack("@L", bronze) +
+            self.value[:73] + pack("@l", gold) +
+            self.value[77:148] + pack("@l", silver) +
+            self.value[152:223] + pack("@l", bronze) +
             self.value[227:]
         )
 
