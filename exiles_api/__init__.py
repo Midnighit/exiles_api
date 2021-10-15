@@ -2094,13 +2094,17 @@ class Properties(GameBase):
         """
         # do nothing if row doesn't match
         if not self.name == "Pippi_WalletComponent_C.walletAmount":
-            return
+            raise ValueError("Character does not have a Pippi Wallet.")
 
         # only allow changing money for chars for the time being
         # changing money for thespians will require to also change the transaction log
         char = session.query(Characters).get(self.object_id)
         if not char:
-            return
+            raise ValueError("Character not found.")
+
+        # Pippi internal limits only allow for positive numbers up to 2.147.483.647 gold 99 silver 99 bronze
+        if value < 0 or value > 21474836479999:
+            raise OverflowError("Value out of Pippi internal limits. Value has to be between 0 and 21474836479999.")
 
         # this is the gold, silver and bronze that is supposed to be set
         gold, silver, bronze = Properties.bronze2tuple(value)
@@ -2158,17 +2162,22 @@ class Properties(GameBase):
                     char_not_found = True
                 # if result is any other message that's not a success, do nothing
                 elif result not in success_msg:
-                    return
+                    raise ValueError(result)
+            # if all signs point towards the character being online but no mcr is available, raise an exception
+            elif not mcr and _allows_login and char.slot == "active" and char.account.online:
+                raise ValueError("Cannot assign Pippi money while character is online  without RCon connection.")
 
             # if char is not online it should be safe to set the money directly via sql
             if (
                 char_not_found or char.slot != "active" or not _allows_login or
                 (_allows_login and char.slot == "active" and not char.account.online)
             ):
+                print("char not online")
                 self.value = money
 
         # if the server is not running, money can be set safely via sql method
         else:
+            print("server not running")
             self.value = money
 
     def __repr__(self):
