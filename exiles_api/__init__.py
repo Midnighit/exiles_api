@@ -817,6 +817,18 @@ class Stats:
             d = db_date()
         threshold = 0 if not td else int((d - td).timestamp())
         C = Characters
+        # determine server wealth and average/median wealth per character
+        wealth, guild_wealth = [], 0
+        # character wealth includes all wealth tied directly to a character or thespians they own
+        for c in session.query(C).order_by(C._last_login.desc()).all():
+            bronze = Properties.get_pippi_money(char_id=c.id, as_number=True)
+            # try to exclude admin/support chars with access to the cheat menu from the statistics
+            if c.slot == 'active' or c.slot in ('1', '2'):
+                wealth.append(bronze)
+        # guild wealth does not include characters or thespians owned by them
+        for g in session.query(Guilds).all():
+            guild_wealth += Properties.get_pippi_money(guild_id=g.id, with_chars=False, as_number=True)
+
         members = MembersManager.get_members(td, d, False)
         # stores all tiles indexed by their respective owners
         building_tiles, placeables, tiles = {}, {}, {}
@@ -924,6 +936,7 @@ class Stats:
             s['tilesInactiveChars'] = tiles_inactive_chars
             s['tilesNoOwner'] = tiles_no_owner
             s['logins'] = session.query(C).filter(C._last_login >= threshold24h).all()
+            s['wealth'] = wealth
         # numbers
         s['dbDate'] = d
         s['numTiles'] = sum(building_tiles.values()) + sum(placeables.values())
@@ -958,6 +971,10 @@ class Stats:
         s['numTilesRuinCharsGuild'] = sum(tiles_ruin_chars_guild.values())
         s['numRuins'] = len(ruins)
         s['numTilesRuins'] = sum(tiles_ruins.values())
+        s['meanWealth'] = mean(wealth)
+        s['medianWealth'] = median(wealth)
+        s['guildWealth'] = guild_wealth
+        s['totalWealth'] = sum(wealth) + guild_wealth
         if tiles_active_guilds:
             s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values())
             s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values())
