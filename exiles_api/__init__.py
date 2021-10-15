@@ -2079,9 +2079,9 @@ class Properties(GameBase):
         if not self.name == "Pippi_WalletComponent_C.walletAmount":
             return None
 
-        gold = unpack('>Q', self.value[66:74])[0]
-        silver = unpack('>Q', self.value[141:149])[0]
-        bronze = unpack('>Q', self.value[216:224])[0]
+        gold = unpack('@L', self.value[73:77])[0]
+        silver = unpack('@L', self.value[148:152])[0]
+        bronze = unpack('@L', self.value[223:227])[0]
         return Properties.tuple2bronze((gold, silver, bronze))
 
     @money.setter
@@ -2107,10 +2107,10 @@ class Properties(GameBase):
 
         # convert and add the gold, silver and bronze values into the blob that is used in the sql method
         money = (
-            self.value[:66] + pack(">Q", gold) +
-            self.value[74:141] + pack(">Q", silver) +
-            self.value[149:216] + pack(">Q", bronze) +
-            self.value[224:]
+            self.value[:73] + pack("@L", gold) +
+            self.value[77:148] + pack("@L", silver) +
+            self.value[152:223] + pack("@L", bronze) +
+            self.value[227:]
         )
 
         # if the server is running a decision needs to be made between the Pippi rcon and the sql method
