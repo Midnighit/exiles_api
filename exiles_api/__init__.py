@@ -2104,7 +2104,7 @@ class Properties(GameBase):
 
         # Pippi internal limits only allow for positive numbers up to 2.147.483.647 gold 99 silver 99 bronze
         if value < 0 or value > 21474836479999:
-            raise OverflowError("Value out of Pippi internal limits. Value has to be between 0 and 21474836479999.")
+            raise ValueError("Pippi can only store bronze values between 0 and 21.474.836.479.999.")
 
         # this is the gold, silver and bronze that is supposed to be set
         gold, silver, bronze = Properties.bronze2tuple(value)
@@ -2150,6 +2150,11 @@ class Properties(GameBase):
                 elif diff_num < 0:
                     change = "remove"
                     diff_num = abs(diff_num)
+
+                # Pippi uses a 4 byte signed representation for bronze so the highest amount added or removed is
+                # 2.147.483.647 Bronze. If user attempts to give more raise an exception
+                if diff_num > 2147483647:
+                    raise ValueError("Pippi can only add or remove values of up to 2.147.483.647 bronze at once.")
 
                 # we always use bronze to avoid multiple rcon commands
                 success_msg = (
