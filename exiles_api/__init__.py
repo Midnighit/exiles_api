@@ -2109,6 +2109,16 @@ class Properties(GameBase):
         # this is the gold, silver and bronze that is supposed to be set
         gold, silver, bronze = Properties.bronze2tuple(value)
 
+        # calculate the difference between the original and the future money balance
+        diff_num = value - self.money
+        if diff_num > 0:
+            change = "add"
+        elif diff_num < 0:
+            change = "remove"
+            diff_num = abs(diff_num)
+        elif diff_num == 0:
+            return
+
         # convert and add the gold, silver and bronze values into the blob that is used in the sql method
         money = (
             self.value[:73] + pack("@l", gold) +
@@ -2143,14 +2153,6 @@ class Properties(GameBase):
                         except Exception as err:
                             return str(err)
 
-                # if the rcon command is used, instead of setting an amount we add or remove a difference
-                diff_num = value - self.money
-                if diff_num >= 0:
-                    change = "add"
-                elif diff_num < 0:
-                    change = "remove"
-                    diff_num = abs(diff_num)
-
                 # Pippi uses a 4 byte signed representation for bronze so the highest amount added or removed is
                 # 2.147.483.647 Bronze. If user attempts to give more raise an exception
                 if diff_num > 2147483647:
@@ -2177,12 +2179,10 @@ class Properties(GameBase):
                 char_not_found or char.slot != "active" or not _allows_login or
                 (_allows_login and char.slot == "active" and not char.account.online)
             ):
-                print("char not online")
                 self.value = money
 
         # if the server is not running, money can be set safely via sql method
         else:
-            print("server not running")
             self.value = money
 
     def __repr__(self):
