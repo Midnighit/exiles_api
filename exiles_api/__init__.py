@@ -724,7 +724,7 @@ class Mods:
             # if inverse is False, all mods are copied
             if not inverse:
                 obj_ids = (
-                    "WHERE (((class LIKE '/Game/Mods/%' OR class LIKE '/Game/DLC/%') "
+                    "WHERE ((class LIKE '/Game/Mods/%' OR class LIKE '/Game/DLC/%') "
                     "AND x=0 AND y=0 AND z=0 AND rx=0 AND ry=0 AND rz=0 AND rw=1) "
                     "OR id IN (SELECT id FROM static_buildables)"
                 )
