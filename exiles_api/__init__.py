@@ -2239,6 +2239,15 @@ class ServerPopulationRecordings(GameBase):
         return f"<ServerPopulationRecordings(time_of_recording={self.time_of_recording}, population={self.population})>"
 
 
+class StaticBuildables(GameBase):
+    __tablename__ = 'static_buildables'
+    __table_args__ = {'autoload': True}
+    __bind_key__ = 'gamedb'
+
+    def __repr__(self):
+        return f"<StaticBuildables(id={self.id}, name={self.name})>"
+
+
 # supplemental.db
 class Users(UsersBase):
     __tablename__ = 'users'
