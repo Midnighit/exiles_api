@@ -1619,14 +1619,20 @@ class Characters(GameBase, Owner):
         return users
 
     @staticmethod
-    def remove(character_ids, autocommit=True):
+    def remove(character_ids, autocommit=True, whitelist=[]):
         if not isinstance(character_ids, ITER):
             character_ids = (character_ids,)
+        char_ids = []
         for id in character_ids:
+            # skip whitelisted chars if whitelist was given
+            if id in whitelist:
+                continue
+            # char_ids only receives ids of non-whitelisted chars
+            char_ids.append(id)
             char = session.query(Characters).get(id)
             player_id = char.pure_player_id
             # if char is the last character in its guild also remove the guild
-            if char.guild and len(char.guild.members) == 1:
+            if char.guild and len(char.guild.members) == 1 and char.guild.id not in whitelist:
                 session.delete(char.guild)
             filter = Characters.player_id.like(player_id + '#_') | (Characters.player_id == player_id)
             # if char is the last character with the given player_id also remove it from the account table
@@ -1636,13 +1642,13 @@ class Characters(GameBase, Owner):
                 if acc:
                     session.delete(acc)
         f = 'fetch'
-        session.query(ActorPosition).filter(ActorPosition.id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(CharacterStats).filter(CharacterStats.char_id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(Properties).filter(Properties.object_id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(Purgescores).filter(Purgescores.purge_id.in_(character_ids)).delete(synchronize_session=f)
-        session.query(Characters).filter(Characters.id.in_(character_ids)).delete(synchronize_session=f)
+        session.query(ActorPosition).filter(ActorPosition.id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(CharacterStats).filter(CharacterStats.char_id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(ItemInventory).filter(ItemInventory.owner_id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(ItemProperties).filter(ItemProperties.owner_id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(Properties).filter(Properties.object_id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(Purgescores).filter(Purgescores.purge_id.in_(char_ids)).delete(synchronize_session=f)
+        session.query(Characters).filter(Characters.id.in_(char_ids)).delete(synchronize_session=f)
         if autocommit:
             session.commit()
 
