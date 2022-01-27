@@ -1411,6 +1411,10 @@ class Guilds(GameBase, Owner):
         else:
             return None
 
+    @property
+    def money(self):
+        return Properties.get_pippi_money(guild_id=self.id, as_number=True)
+
     def active_members(self, td):
         return CharList(member for member in self.members if not member.is_inactive(td))
 
@@ -1608,6 +1612,10 @@ class Characters(GameBase, Owner):
     @property
     def is_character(self):
         return True
+
+    @property
+    def money(self):
+        return Properties.get_pippi_money(char_id=self.id, as_number=True)
 
     @staticmethod
     def get_users(value):
