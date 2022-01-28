@@ -2202,6 +2202,8 @@ class Properties(GameBase):
 
                 # we always use bronze to avoid multiple rcon commands
                 success_msg = (
+                    f"You gave {char.name} {diff_num:,} Bronze",
+                    f"You removed {diff_num:,} Bronze from {char.name}",
                     f"You gave {char.name} {diff_num:,} Bronze".replace(',', '.'),
                     f"You removed {diff_num:,} Bronze from {char.name}".replace(',', '.')
                 )
