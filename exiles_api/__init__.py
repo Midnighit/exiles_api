@@ -2185,12 +2185,12 @@ class Properties(GameBase):
                     fails as well, return the error message to the caller.
                     """
                     try:
-                        result = mcr.command(f"Currency {change} {name} {amount} bronze")
+                        result = mcr.command(f'Currency {change} "{name}" {amount} bronze')
                         return result
                     except Exception:
                         try:
                             mcr.connect()
-                            result = mcr.command(f"Currency {change} {name} {amount} bronze")
+                            result = mcr.command(f'Currency {change} "{name}" {amount} bronze')
                             return result
                         except Exception as err:
                             return str(err)
