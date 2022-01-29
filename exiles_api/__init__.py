@@ -2184,13 +2184,15 @@ class Properties(GameBase):
                     If the try raises an exception, try again after another connect() attempt. If second attempt
                     fails as well, return the error message to the caller.
                     """
+                    cmd = f'Currency {change} "{name}" {amount} bronze'
+                    print(cmd)
                     try:
-                        result = mcr.command(f'Currency {change} "{name}" {amount} bronze')
+                        result = mcr.command(cmd)
                         return result
                     except Exception:
                         try:
                             mcr.connect()
-                            result = mcr.command(f'Currency {change} "{name}" {amount} bronze')
+                            result = mcr.command(cmd)
                             return result
                         except Exception as err:
                             return str(err)
