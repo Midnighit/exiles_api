@@ -2185,7 +2185,6 @@ class Properties(GameBase):
                     fails as well, return the error message to the caller.
                     """
                     cmd = f'Currency {change} "{name}" {amount} bronze'
-                    print(cmd)
                     try:
                         result = mcr.command(cmd)
                         return result
