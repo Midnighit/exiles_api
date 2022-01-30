@@ -86,6 +86,7 @@ def use_rcon_sql(statement):
     try:
         command = f"sql {statement}"
         # print(command)
+        GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
         return mcr.command(command)
     except Exception as err:
         return err
@@ -2187,11 +2188,13 @@ class Properties(GameBase):
                     cmd = f'Currency {change} "{name}" {amount} bronze'
                     try:
                         result = mcr.command(cmd)
+                        GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
                         return result
                     except Exception:
                         try:
                             mcr.connect()
                             result = mcr.command(cmd)
+                            GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
                             return result
                         except Exception as err:
                             return str(err)
