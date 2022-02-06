@@ -1,6 +1,7 @@
 import os
 import json
 import warnings
+from aiomcrcon import Client
 from psutil import process_iter
 from statistics import median, mean
 from math import floor, ceil, sqrt
@@ -34,8 +35,7 @@ Session = sessionmaker(class_=RoutingSession)
 session = Session()
 GameBase.metadata = metadata
 
-# needs to be set from the importing module to be used
-mcr = None
+trc = None
 
 RANKS = ('Recruit', 'Member', 'Officer', 'Guildmaster')
 ITER = (list, tuple, set)
@@ -80,16 +80,6 @@ def allows_login():
 
 def get_raw_sql(query):
     return str(query.statement.compile(compile_kwargs={"literal_binds": True}))
-
-
-def use_rcon_sql(statement):
-    try:
-        command = f"sql {statement}"
-        # print(command)
-        GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
-        return mcr.command(command)
-    except Exception as err:
-        return err
 
 
 def db_date():
@@ -150,6 +140,44 @@ def iter2str(value):
         return str(value)[1:-2]
     else:
         return str(value)[1:-1]
+
+
+# RCon
+class TERPRCon(Client):
+    async def send_cmd(self, cmd: str, timeout=2) -> tuple:
+        """ Like the original send_cmd in Client but stores utcnow in GlovaVars """
+        GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
+        return await super().send_cmd(cmd, timeout)
+
+    async def safe_send_cmd(self, cmd: str, timeout=2, noblank=True) -> tuple:
+        """ Like self.send_cmd but wrapped in a try/error with a default message """
+        if not self._ready:
+            return 'No RCon connection available, please try again later', False
+        try:
+            response = await self.send_cmd(cmd, timeout)
+            if noblank and response[0] == '':
+                return 'RCon reply was empty.', False
+            else:
+                return response[0], True
+        except Exception as err:
+            if isinstance(err, str):
+                return err, False
+            elif noblank and str(err) == '':
+                return 'RCon command failed.', False
+            else:
+                return str(err), False
+
+    @property
+    def last_cmd(self):
+        return GlobalVars.get_value("LAST_CMD")
+
+    @last_cmd.setter
+    def last_cmd(self, value):
+        GlobalVars.set_value("LAST_CMD", value)
+
+    @property
+    def is_connected(self):
+        return self._ready
 
 
 # non-db classes
@@ -2127,13 +2155,12 @@ class Properties(GameBase):
         bronze = unpack('@l', self.value[223:227])[0]
         return Properties.tuple2bronze((gold, silver, bronze))
 
-    @money.setter
-    def money(self, value):
+    async def set_money(self, value):
         """
         Tries to set the Pippi money value as integer number of bronze of the char owning this property row.
-        Setter prioritizes the Pippi internal method of giving money when the char is online and mcr has been set
+        Setter prioritizes the Pippi internal method of giving money when the char is online and trc has been set
         but sets it directly via sql if character is not online or server isn't running.
-        Does nothing if char is online and no mcr is available.
+        Does nothing if char is online and no trc is available.
         """
         # do nothing if row doesn't match
         if not self.name == "Pippi_WalletComponent_C.walletAmount":
@@ -2177,27 +2204,12 @@ class Properties(GameBase):
             # keep the result of the allows_login check for later use
             _allows_login = allows_login()
             # if mcr is available, logging in is possible and char is online, try the Pippi method
-            if mcr and _allows_login and char.slot == "active" and char.account.online:
+            if trc and _allows_login and char.slot == "active" and char.account.online:
 
-                def set_with_rcon(change, name, amount):
-                    """
-                    Tries to use rcon to add or remove the given amount of money to the given char.
-                    If the try raises an exception, try again after another connect() attempt. If second attempt
-                    fails as well, return the error message to the caller.
-                    """
+                async def set_with_rcon(change, name, amount):
+                    """ Tries to use rcon to add or remove the given amount of money to the given char. """
                     cmd = f'Currency {change} "{name}" {amount} bronze'
-                    try:
-                        result = mcr.command(cmd)
-                        GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
-                        return result
-                    except Exception:
-                        try:
-                            mcr.connect()
-                            result = mcr.command(cmd)
-                            GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
-                            return result
-                        except Exception as err:
-                            return str(err)
+                    return await trc.safe_send_cmd(cmd)
 
                 # Pippi uses a 4 byte signed representation for bronze so the highest amount added or removed is
                 # 2.147.483.647 Bronze. If user attempts to give more raise an exception
@@ -2212,14 +2224,14 @@ class Properties(GameBase):
                     f"You removed {diff_num:,} Bronze from {char.name}".replace(',', '.')
                 )
                 # result is either the rcon message or an exception error message
-                result = set_with_rcon(change, char.name, diff_num)
-                if result.startswith("No players found with the name"):
+                result, success = await set_with_rcon(change, char.name, diff_num)
+                if success and result.startswith("No players found with the name"):
                     char_not_found = True
                 # if result is any other message that's not a success, do nothing
                 elif result not in success_msg:
                     raise ValueError(result)
             # if all signs point towards the character being online but no mcr is available, raise an exception
-            elif not mcr and _allows_login and char.slot == "active" and char.account.online:
+            elif (not trc or not trc.is_connected) and _allows_login and char.slot == "active" and char.account.online:
                 raise ValueError("Cannot assign Pippi money while character is online  without RCon connection.")
 
             # if char is not online it should be safe to set the money directly via sql
