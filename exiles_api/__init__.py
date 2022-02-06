@@ -144,12 +144,12 @@ def iter2str(value):
 
 # RCon
 class TERPRCon(Client):
-    async def send_cmd(self, cmd: str, timeout=2) -> tuple:
+    async def send_cmd(self, cmd: str, timeout=60) -> tuple:
         """ Like the original send_cmd in Client but stores utcnow in GlovaVars """
         GlobalVars.set_value("LAST_CMD", datetime.timestamp(datetime.utcnow()))
         return await super().send_cmd(cmd, timeout)
 
-    async def safe_send_cmd(self, cmd: str, timeout=2, noblank=True) -> tuple:
+    async def safe_send_cmd(self, cmd: str, timeout=60, noblank=True) -> tuple:
         """ Like self.send_cmd but wrapped in a try/error with a default message """
         if not self._ready:
             return 'No RCon connection available, please try again later', False
@@ -157,6 +157,8 @@ class TERPRCon(Client):
             response = await self.send_cmd(cmd, timeout)
             if noblank and response[0] == '':
                 return 'RCon reply was empty.', False
+            elif response[0] == 'read() called while another coroutine is already waiting for incoming data':
+                return 'Another command is currently still waiting for a reply. Please try again later.', False
             else:
                 return response[0], True
         except Exception as err:
