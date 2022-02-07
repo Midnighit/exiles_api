@@ -1013,10 +1013,12 @@ class Stats:
         s['medianCharsWealth'] = median(wealth)
         s['guildWealth'] = guild_wealth
         s['totalWealth'] = sum(wealth) + guild_wealth
-        s['meanActiveCharsWealth'] = mean(wealth_active)
-        s['medianActiveCharsWealth'] = median(wealth_active)
-        s['meanInactiveCharsWealth'] = mean(wealth_inactive)
-        s['medianInactiveCharsWealth'] = median(wealth_inactive)
+        if wealth_active:
+            s['meanActiveCharsWealth'] = mean(wealth_active)
+            s['medianActiveCharsWealth'] = median(wealth_active)
+        if wealth_inactive:
+            s['meanInactiveCharsWealth'] = mean(wealth_inactive)
+            s['medianInactiveCharsWealth'] = median(wealth_inactive)
         if tiles_active_guilds:
             s['meanTilesActiveGuilds'] = mean(tiles_active_guilds.values())
             s['medianTilesActiveGuilds'] = median(tiles_active_guilds.values())
