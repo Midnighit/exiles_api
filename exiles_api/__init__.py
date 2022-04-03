@@ -91,7 +91,7 @@ def db_date():
 
 
 def make_instance_db(
-    source_db="game.db",
+    source_db="savagewilds_game.db",
     dest_db="dest.db",
     owner_ids=None,
     inverse_owners=False,
@@ -736,7 +736,7 @@ class MembersManager:
 
 class Mods:
     @staticmethod
-    def copy(source_db="game.db", dest_db="dest.db", mod_names=None, inverse=False):
+    def copy(source_db="savagewilds_game.db", dest_db="dest.db", mod_names=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -795,7 +795,7 @@ class Mods:
         engine.dispose()
 
     @staticmethod
-    def delete(db="game.db", mod_names=None, inverse=False):
+    def delete(db="savagewilds_game.db", mod_names=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -1059,7 +1059,7 @@ class Stats:
         return s
 
 
-# game.db
+# savagewilds_game.db
 class Account(GameBase):
     __tablename__ = 'account'
     __table_args__ = {'autoload': True}
@@ -1271,7 +1271,7 @@ class Buildings(GameBase):
             return ()
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, loc=None, inverse=False):
+    def copy(source_db="backup.db", dest_db="savagewilds_game.db", owner_ids=None, loc=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -1338,7 +1338,7 @@ class Buildings(GameBase):
         engine.dispose()
 
     @staticmethod
-    def delete(db="game.db", owner_ids=None, loc=None, inverse=False):
+    def delete(db="savagewilds_game.db", owner_ids=None, loc=None, inverse=False):
         # confirm that source and destination files exist
         if not os.path.isfile(SAVED_DIR_PATH + '/' + db):
             print("DB file doesn't exist in saved folder.")
@@ -1463,7 +1463,7 @@ class Guilds(GameBase, Owner):
         return False
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
+    def copy(source_db="backup.db", dest_db="savagewilds_game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
@@ -1718,7 +1718,7 @@ class Characters(GameBase, Owner):
             session.commit()
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_alts=False, inverse=False):
+    def copy(source_db="backup.db", dest_db="savagewilds_game.db", owner_ids=None, with_alts=False, inverse=False):
         # copy without owner_ids means copy all characters the inverse of that is no characters
         if owner_ids is None and inverse:
             return None
