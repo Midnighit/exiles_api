@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
-from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean, Interval
+from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean
 from config import GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH, EXE_DIR_PATH
 
 GameBase = declarative_base()
@@ -120,17 +120,53 @@ def make_instance_db(
     Characters.copy(source_db, dest_db, char_ids, with_alts, inverse_owners)
 
 
-def next_time(value):
-    weekdays = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, "Friday": 4, "Saturday": 5, "Sunday": 6}
-    now = datetime.utcnow()
-    d, t = value.split()
-    hour, minute = t.split(':')
+def next_time(mode, use_time=None):
+    now = use_time if use_time else datetime.utcnow()
+    frequency, start_day, start_time = mode.split(';')
+    hour, minute = start_time.split(':')
     due_time = time(hour=int(hour), minute=int(minute))
-    today = datetime.combine(now, due_time)
-    days_ahead = (weekdays[d] - today.weekday()) % 7
-    if days_ahead == 0 and now.time() > due_time:
-        days_ahead = 7
-    return today + timedelta(days=days_ahead)
+
+    if frequency == 'monthly':
+        if start_day > now.day or (start_day == now.day and now.time() > due_time):
+            return datetime.combine((now.replace(day=1) + timedelta(days=32)).replace(day=start_day), due_time)
+        else:
+            return datetime.combine(now.replace(day=start_day), due_time)
+
+    elif frequency == 'weekly':
+        days_ahead = (start_day - datetime.combine(now, due_time).weekday()) % 7
+        if days_ahead == 0 and now.time() > due_time:
+            days_ahead = 7
+        return datetime.combine(now, due_time) + timedelta(days=days_ahead)
+
+    elif frequency == 'daily':
+        if now.time() > due_time:
+            return datetime.combine(now + timedelta(days=1), due_time)
+        else:
+            return datetime.combine(now, due_time)
+
+    elif frequency == 'hourly':
+        result = now.replace(minute=due_time.minute).replace(second=0).replace(microsecond=0)
+        if now > result:
+            return result + timedelta(hours=1)
+        else:
+            return result
+
+
+def adjusted_next_due(next_due, mode, balance):
+    frequency, start_day, start_time = mode.split(';')
+    hour, minute = start_time.split(':')
+    due_time = time(hour=int(hour), minute=int(minute))
+    if frequency == "monthly":
+        result = next_due
+        for _ in range(balance):
+            result = datetime.combine((result.replace(day=1) + timedelta(days=32)).replace(day=start_day), due_time)
+        return result
+    elif frequency == "weekly":
+        return next_due + timedelta(weeks=balance)
+    elif frequency == "daily":
+        return next_due + timedelta(days=balance)
+    elif frequency == "hourly":
+        return next_due + timedelta(hours=balance)
 
 
 def iter2str(value):
@@ -2608,8 +2644,7 @@ class Categories(UsersBase):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     cmd = Column(String, nullable=False)
-    frequency = Column(Interval, default=timedelta(days=7))
-    start = Column(String, default=datetime.utcnow().strftime('%A') + ' 00:00')
+    mode = Column(String, default='weekly;0;00:00')
     fee = Column(Integer, default=1)
     verbosity = Column(Integer, default=1)
     guild_pay = Column(Boolean, default=False)
@@ -2660,7 +2695,7 @@ class CatOwners(UsersBase):
         elif not ('group' in kwargs or 'group_id' in kwargs):
             category = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
             if 'next_due' not in kwargs:
-                kwargs['next_due'] = next_time(category.start) if category and category.start else datetime.utcnow()
+                kwargs['next_due'] = next_time(category.mode) if category and category.mode else datetime.utcnow()
             kwargs['group'] = Groups(name=kwargs.get('name'), category=category)
         _kwargs = {}
         for key, arg in kwargs.items():
@@ -2756,7 +2791,7 @@ class Groups(UsersBase):
             cat = kwargs.get('category')
             if not cat:
                 cat = session.query(Categories).get(kwargs['category_id'])
-            kwargs['next_due'] = next_time(cat.start) if cat and cat.start else datetime.utcnow()
+            kwargs['next_due'] = next_time(cat.mode) if cat and cat.mode else datetime.utcnow()
         super().__init__(*args, **kwargs)
 
     @property
