@@ -123,11 +123,12 @@ def make_instance_db(
 def next_time(mode, use_time=None):
     now = use_time if use_time else datetime.utcnow()
     frequency, start_day, start_time = mode.split(';')
+    start_day = int(start_day)
     hour, minute = start_time.split(':')
     due_time = time(hour=int(hour), minute=int(minute))
 
     if frequency == 'monthly':
-        if start_day > now.day or (start_day == now.day and now.time() > due_time):
+        if now.day > start_day or (now.day == start_day and now.time() > due_time):
             return datetime.combine((now.replace(day=1) + timedelta(days=32)).replace(day=start_day), due_time)
         else:
             return datetime.combine(now.replace(day=start_day), due_time)
@@ -2693,7 +2694,7 @@ class CatOwners(UsersBase):
         if not ('group' in kwargs or 'group_id' in kwargs) and not ('category' in kwargs or 'category_id' in kwargs):
             raise SQLAlchemyError("Initialization requires either a group or a category.")
         elif not ('group' in kwargs or 'group_id' in kwargs):
-            category = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
+            category = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 1)))
             if 'next_due' not in kwargs:
                 kwargs['next_due'] = next_time(category.mode) if category and category.mode else datetime.utcnow()
             kwargs['group'] = Groups(name=kwargs.get('name'), category=category)
