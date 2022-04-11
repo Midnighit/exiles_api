@@ -2658,10 +2658,10 @@ class CatOwners(UsersBase):
         if not ('group' in kwargs or 'group_id' in kwargs) and not ('category' in kwargs or 'category_id' in kwargs):
             raise SQLAlchemyError("Initialization requires either a group or a category.")
         elif not ('group' in kwargs or 'group_id' in kwargs):
+            category = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
             if 'next_due' not in kwargs:
-                cat = kwargs.get('category', session.query(Categories).get(kwargs.get('category_id', 0)))
-                kwargs['next_due'] = next_time(cat.start) if cat and cat.start else datetime.utcnow()
-            kwargs['group'] = Groups(name=kwargs.get('name'), next_due=kwargs['next_due'], category=cat)
+                kwargs['next_due'] = next_time(category.start) if category and category.start else datetime.utcnow()
+            kwargs['group'] = Groups(name=kwargs.get('name'), category=category)
         _kwargs = {}
         for key, arg in kwargs.items():
             if key in self.__mapper__.attrs.keys():
@@ -2688,9 +2688,18 @@ class CatOwners(UsersBase):
 
     @property
     def name(self):
-        name = session.query(Characters.name).filter_by(id=self.id).union(
-               session.query(Guilds.name).filter_by(id=self.id)).first()
-        return name[0] if name else None
+        owner = session.query(Characters.id, Characters.name).filter_by(id=self.id).union(
+            session.query(Guilds.id, Guilds.name).filter_by(id=self.id)
+        ).first()
+        if not owner:
+            return None
+        else:
+            id, name = owner
+        if name == "Ruins":
+            guess = session.query(OwnersCache.name).filter_by(id=id).scalar()
+            return f'{guess} (Ruins)' if guess else 'Ruins'
+        else:
+            return name
 
     @name.setter
     def name(self, value):
@@ -2755,10 +2764,7 @@ class Groups(UsersBase):
         if self._name:
             return self._name
         elif len(self.owners) >= 1:
-            id = self.owners[0].id
-            name = session.query(Characters.name).filter_by(id=id).union(
-                   session.query(Guilds.name).filter_by(id=id)).first()
-            return name[0] if name else None
+            return self.owners[0].name
         return None
 
     @name.setter
