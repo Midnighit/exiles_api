@@ -13,7 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
 from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean
-from config import GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH, EXE_DIR_PATH
+from config import GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH, EXE_DIR_PATH, GAME_DB, BACKUP_DB
 
 GameBase = declarative_base()
 UsersBase = declarative_base()
@@ -91,8 +91,8 @@ def db_date():
 
 
 def make_instance_db(
-    source_db="game.db",
-    dest_db="dest.db",
+    source_db=GAME_DB,
+    dest_db=BACKUP_DB,
     owner_ids=None,
     inverse_owners=False,
     loc=None,
@@ -773,7 +773,7 @@ class MembersManager:
 
 class Mods:
     @staticmethod
-    def copy(source_db="game.db", dest_db="dest.db", mod_names=None, inverse=False):
+    def copy(source_db=GAME_DB, dest_db="dest.db", mod_names=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -832,7 +832,7 @@ class Mods:
         engine.dispose()
 
     @staticmethod
-    def delete(db="game.db", mod_names=None, inverse=False):
+    def delete(db=GAME_DB, mod_names=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -1308,7 +1308,7 @@ class Buildings(GameBase):
             return ()
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, loc=None, inverse=False):
+    def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, loc=None, inverse=False):
         # confirm that source and destination files exist
         if not (os.path.isfile(SAVED_DIR_PATH + '/' + source_db) and os.path.isfile(SAVED_DIR_PATH + '/' + dest_db)):
             print("Either source or destination DB file don't exist in saved folder.")
@@ -1375,7 +1375,7 @@ class Buildings(GameBase):
         engine.dispose()
 
     @staticmethod
-    def delete(db="game.db", owner_ids=None, loc=None, inverse=False):
+    def delete(db=GAME_DB, owner_ids=None, loc=None, inverse=False):
         # confirm that source and destination files exist
         if not os.path.isfile(SAVED_DIR_PATH + '/' + db):
             print("DB file doesn't exist in saved folder.")
@@ -1437,11 +1437,11 @@ class Buildings(GameBase):
             session.commit()
 
     @staticmethod
-    def restore_from_backup(owner_ids, source_db="backup.db", dest_db="game.db", loc=None, remove=True):
+    def restore_from_backup(owner_ids, source_db=BACKUP_DB, dest_db=GAME_DB, loc=None, remove=True):
         # basically an alias for a specific utilisation of the copy method
         if remove:
-            Buildings.delete(db="game.db", owner_ids=owner_ids)
-        Buildings.copy(source_db="backup.db", dest_db="game.db", owner_ids=owner_ids, loc=loc)
+            Buildings.delete(db=dest_db, owner_ids=owner_ids)
+        Buildings.copy(source_db=source_db, dest_db=dest_db, owner_ids=owner_ids, loc=loc)
 
     def __repr__(self):
         return f"<Buildings(object_id={self.object_id}, owner_id={self.owner_id})>"
@@ -1500,7 +1500,7 @@ class Guilds(GameBase, Owner):
         return False
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
+    def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
@@ -1755,7 +1755,7 @@ class Characters(GameBase, Owner):
             session.commit()
 
     @staticmethod
-    def copy(source_db="backup.db", dest_db="game.db", owner_ids=None, with_alts=False, inverse=False):
+    def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, with_alts=False, inverse=False):
         # copy without owner_ids means copy all characters the inverse of that is no characters
         if owner_ids is None and inverse:
             return None
