@@ -92,7 +92,7 @@ def db_date():
 
 def make_instance_db(
     source_db=GAME_DB,
-    dest_db=BACKUP_DB,
+    dest_db='dest_db',
     owner_ids=None,
     inverse_owners=False,
     loc=None,
