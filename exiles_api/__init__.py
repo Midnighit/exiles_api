@@ -101,9 +101,9 @@ def make_instance_db(
     inverse_mods=False,
     mod_names=None
 ):
+    guild_ids = []
+    char_ids = []
     if owner_ids:
-        guild_ids = []
-        char_ids = []
         for owner_id in owner_ids:
             if session.query(Characters).get(owner_id):
                 char_ids.append(owner_id)
