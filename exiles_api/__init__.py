@@ -1512,7 +1512,7 @@ class Guilds(GameBase, Owner):
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
-        
+
         # generate an appropriate WHERE clause
         def owner_filter(key):
             slid = "SELECT guildId FROM src.guilds"
