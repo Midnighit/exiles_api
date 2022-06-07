@@ -92,7 +92,7 @@ def db_date():
 
 def make_instance_db(
     source_db=GAME_DB,
-    dest_db='dest_db',
+    dest_db='dest.db',
     owner_ids=None,
     inverse_owners=False,
     loc=None,
@@ -1215,6 +1215,9 @@ class Buildings(GameBase):
 
     @staticmethod
     def _get_objects_query(owner_ids=None, loc=None, inverse=False, attach=None):
+        # If no owners are given and selection isn't inverted, no objects need to be copied
+        if not owner_ids and not inverse:
+            return None
         attach = attach + '.' if attach else ''
         # The SELECT clause is always the same
         query_list = ["SELECT object_id"]
@@ -1330,6 +1333,10 @@ class Buildings(GameBase):
 
         # generate the apropriate query with the information given
         obj_ids = Buildings._get_objects_query(owner_ids, loc, inverse, attach='src')
+
+        # if obj_ids is empty, we're done here.
+        if not obj_ids:
+            return
 
         thrall_ids = ''
         if owner_ids:
@@ -1505,7 +1512,7 @@ class Guilds(GameBase, Owner):
         # copy without owner_ids means copy all guilds the inverse of that is no guilds
         if owner_ids is None and inverse:
             return None
-
+        
         # generate an appropriate WHERE clause
         def owner_filter(key):
             slid = "SELECT guildId FROM src.guilds"
@@ -1759,6 +1766,10 @@ class Characters(GameBase, Owner):
     def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, with_alts=False, inverse=False):
         # copy without owner_ids means copy all characters the inverse of that is no characters
         if owner_ids is None and inverse:
+            return None
+
+        # copy with owner_ids as an empty list means literally no chars unless inverted
+        if not owner_ids and not inverse:
             return None
 
         # generate an appropriate WHERE clause
