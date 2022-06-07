@@ -1331,6 +1331,7 @@ class Buildings(GameBase):
         # generate the apropriate query with the information given
         obj_ids = Buildings._get_objects_query(owner_ids, loc, inverse, attach='src')
 
+        thrall_ids = ''
         if owner_ids:
             if not isinstance(owner_ids, ITER):
                 owner_ids = (owner_ids, )
