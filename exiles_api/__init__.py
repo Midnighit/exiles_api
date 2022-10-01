@@ -2413,7 +2413,7 @@ class OwnersCache(UsersBase, Owner):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update(ruins_clan_id=11, autocommit=True):
+    def update(ruins_clan_id=-1, autocommit=True):
         owners = cache = {}
         results = session.query(Guilds.id, Guilds.name).filter(Guilds.name != 'Ruins').all()
         owners = {owner[0]: owner[1] for owner in results}
@@ -2454,7 +2454,7 @@ class ObjectsCache(UsersBase):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def update(ruins_clan_id=11, autocommit=True):
+    def update(ruins_clan_id=-1, autocommit=True):
         objects = cache = {}
         sqGuilds = session.query(Guilds.id)
         sqChars = session.query(Characters.id)
