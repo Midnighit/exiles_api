@@ -1,6 +1,7 @@
 import os
 import json
 import warnings
+from operator import itemgetter
 from aiomcrcon import Client
 from psutil import process_iter
 from statistics import median, mean
@@ -223,85 +224,88 @@ class TERPRCon(Client):
 class ChatLogs:
     def __init__(self, path, after_date=None):
         self.path = path
-        self.files, self.pippi = [], []
+        # format: self.files['ConanSandbox'][2]['name'] == 'ConanSandbox-backup-2022.11.01-02.33.01.log'
+        self.files = {'ConanSandbox': [], 'Chat': [], 'Commands': []}
         # add one second to account for lost split seconds in the log
         self.after_date = after_date + timedelta(seconds=1) if after_date else None
         filelist = os.listdir(path)
         filelist.sort(reverse=True)
         for filename in filelist:
-            if filename.startswith('ConanSandbox'):
-                if filename.startswith('ConanSandbox-backup'):
-                    date = datetime.strptime(filename[20:39], '%Y.%m.%d-%H.%M.%S')
-                    if not after_date or date > after_date:
-                        self.files.append({'name': filename, 'date': date})
-                else:
-                    date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(path, filename)))
-                    if not after_date or date > after_date:
-                        self.files.insert(0, {'name': filename, 'date': date})
-            if filename.startswith('PippiCommands'):
-                if filename.startswith('PippiCommands-backup'):
-                    date = datetime.strptime(filename[21:40], '%Y.%m.%d-%H.%M.%S')
-                    if not after_date or date > after_date:
-                        self.pippi.append({'name': filename, 'date': date})
-                else:
-                    date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(path, filename)))
-                    if not after_date or date > after_date:
-                        self.pippi.insert(0, {'name': filename, 'date': date})
+            self._populate_file_cache(filename, 'ConanSandbox')
+            self._populate_file_cache(filename, 'Chat')
+            self._populate_file_cache(filename, 'Commands')
 
-    def get_lines(self, after_date=None):
-        self.chat_lines, normal_lines, special_lines = [], [], []
-        after_date = after_date + timedelta(seconds=1) if after_date else self.after_date
-        # iterate through files from oldest to newest
-        for file in sorted(self.files, key=lambda item: item['date']):
-            if not after_date or file['date'] > after_date:
-                filename = os.path.join(self.path, file['name'])
-                with open(filename, 'r', encoding='utf-8-sig') as f:
-                    lines = f.readlines()
-                for line in lines[:-1]:
-                    if line[0] == '[':
-                        date = self.get_date(line)
-                        if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
-                            normal_lines.append(line)
-
-        for file in sorted(self.pippi, key=lambda item: item['date']):
-            if not after_date or file['date'] > after_date:
-                filename = os.path.join(self.path, file['name'])
-                with open(filename, 'r', encoding='utf-8-sig') as f:
-                    lines = f.readlines()
-                for line in lines[:-1]:
-                    if line[0] == '[':
-                        date = self.get_date(line)
-                        if (not after_date or date > after_date) and '[Pippi]PippiChat: ' in line:
-                            special_lines.append(line)
-
-        # merge normal and special lines keeping the temporal order intact
-        normal_date = self.get_date(normal_lines[0]) if len(normal_lines) > 0 else None
-        special_date = self.get_date(special_lines[0]) if len(special_lines) > 0 else None
-        while True:
-            # if either of the two list are empty append the other to the result and break out of the loop
-            if len(normal_lines) == 0:
-                self.chat_lines += special_lines
-                break
-            elif len(special_lines) == 0:
-                self.chat_lines += normal_lines
-                break
-            # compare both dates, append the older one to the merge list and update it for the next comparison
-            if normal_date <= special_date:
-                self.chat_lines.append(normal_lines.pop(0))
-                normal_date = self.get_date(normal_lines[0]) if len(normal_lines) > 0 else None
+    def _populate_file_cache(self, filename, name):
+        if filename.startswith(name):
+            if filename.startswith(f'{name}-backup'):
+                start, end = len(name) + 8, len(name) + 27
+                date = datetime.strptime(filename[start:end], '%Y.%m.%d-%H.%M.%S')
+                if not self.after_date or date > self.after_date:
+                    self.files[name].append({'name': filename, 'date': date})
             else:
-                self.chat_lines.append(special_lines.pop(0))
-                special_date = self.get_date(special_lines[0]) if len(special_lines) > 0 else None
+                date = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(self.path, filename)))
+                if not self.after_date or date > self.after_date:
+                    self.files[name].insert(0, {'name': filename, 'date': date})
 
-    def cycle_pippi(self, keep_files=3):
-        while len(self.pippi) >= keep_files:
-            oldest_file = self.pippi[-1]
+    def _populate_lines_cache(self, name, log_type='chat'):
+        for file in sorted(self.files[name], key=lambda item: item['date']):
+            if not self.after_date or file['date'] > self.after_date:
+                filename = os.path.join(self.path, file['name'])
+                with open(filename, 'r', encoding='utf-8-sig') as f:
+                    lines = f.readlines()
+                for line in lines[1:-1]:
+                    # Old style ConanSandbox.log parsing
+                    if name == 'ConanSandbox':
+                        """
+                        Example Chat (ConanSandbox.log)
+                        [2000.01.01-12.00.00:000][Pippi]PippiChat: Alice said in channel [Alice:Bob]: Hello Bob!
+                                                                   ^div_1                          ^div_2
+                        """
+                        if line[0] == '[':
+                            date = self.get_date(line)
+                            if (not self.after_date or date > self.after_date) and '[Pippi]PippiChat: ' in line:
+                                data = {'datetime': date}
+                                div_1 = 43
+                                div_2 = line.find(']:', div_1)
+                                data['name'], channel = line[div_1:div_2].split(" said in channel [")
+                                if channel in ('Global', 'Local', 'Emote', 'Shout', 'Mumble') or ':' in channel:
+                                    data['channel'] = channel
+                                else:
+                                    data['channel'] = 'Guild'
+                                data['type'] = 'Chat'
+                                data['content'] = line[div_2+3:-1]
+                                if '"' in data['content']:
+                                    data['content'] = data['content'].replace('"', "'")
+                                for c in ';\n\r':
+                                    if c in data['content']:
+                                        data['content'] = data['content'].replace(c, '')
+                                self.chat_lines.append(data)
+
+                    # New JSON style Chat.log parsing
+                    else:
+                        try:
+                            data = json.loads(line)
+                        except Exception:
+                            print(f"Failed loading JSON from {filename}:{lines.index(line)+1}")
+                            continue
+
+                        date = self.get_date(data, string_style=False)
+                        data['datetime'] = date
+                        if (not self.after_date or date > self.after_date):
+                            if log_type == 'chat':
+                                self.chat_lines.append(data)
+                            else:
+                                self.command_lines.append(data)
+
+    def _cycle_files(self, keep_files, name):
+        while len(self.files[name]) >= keep_files:
+            oldest_file = self.files[name][-1]
             path = os.path.join(self.path, oldest_file['name'])
             counter = 1
             while True:
                 try:
                     os.remove(path)
-                    del self.pippi[-1]
+                    del self.files[name][-1]
                     break
                 except Exception as exc:
                     print(f"Failed attempt {counter} to delete {path}.\n{str(exc)}\nTrying again in 1 second.")
@@ -313,83 +317,97 @@ class ChatLogs:
 
         # if the script reaches this point there should be only keep_files - 1 files left
         # rename the youngest one (without a date in its filename) to -backup-date
-        src_path = os.path.join(self.path, 'PippiCommands.log')
-        last_edit = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime('%Y.%m.%d-%H.%M.%S')
-        dst_path = src_path[:-4] + '-backup-' + last_edit + '.log'
-        counter = 1
-        while True:
-            try:
-                os.rename(src_path, dst_path)
-                self.pippi[0]['name'] = 'PippiCommands-backup-' + last_edit + '.log'
-                break
-            except Exception as exc:
-                print(
-                    f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\n"
-                    f"Trying again in 1 second."
-                )
-                if counter < 5:
-                    counter += 1
-                    sleep(1)
-                else:
-                    return False
+        src_path = os.path.join(self.path, name + '.log')
+        if len(self.files[name]) > 0:
+            date_pattern = '%Y.%m.%d-%H.%M.%S'
+            last_edit = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(src_path))).strftime(date_pattern)
+            dst_path = src_path[:-4] + '-backup-' + last_edit + '.log'
+            counter = 1
+            while True:
+                try:
+                    os.rename(src_path, dst_path)
+                    self.files[name][0]['name'] = f'{name}-backup-{last_edit}.log'
+                    break
+                except Exception as exc:
+                    print(
+                        f"Failed attempt {counter} to rename {src_path} to {dst_path}.\n{str(exc)}\n"
+                        f"Trying again in 1 second."
+                    )
+                    if counter < 5:
+                        counter += 1
+                        sleep(1)
+                    else:
+                        return False
         # append a log file closed line to the newly backuped log
         now = datetime.utcnow()
-        log_date_fmt1 = now.strftime('%m/%d/%y %H:%M:%S')
-        log_date_fmt2 = now.strftime('%Y.%m.%d-%H.%M.%S:%f')[:-3]
-        try:
-            with open(dst_path, 'a', encoding='utf-8-sig') as f:
-                f.write(f"[{log_date_fmt2}]Log file closed, {log_date_fmt1}\n")
-        except Exception as exc:
-            print(f"Failed to edit PippiCommands.log-backup-{last_edit}.log'.\n{str(exc)}")
-            return False
+        log_date_fmt = now.strftime('%m/%d/%y %H:%M:%S')
+        if len(self.files[name]) > 0:
+            try:
+                with open(dst_path, 'a', encoding='utf-8-sig') as f:
+                    f.write(f"Log file closed, {log_date_fmt}\n")
+            except Exception as exc:
+                print(f"Failed to edit {name}-backup-{last_edit}.log'.\n{str(exc)}")
+                return False
 
         try:
             with open(src_path, 'a', encoding='utf-8-sig') as f:
-                f.write(f"Log file open, {log_date_fmt1}\n")
+                f.write(f"Log file open, {log_date_fmt}\n")
         except Exception as exc:
-            print(f"Failed to create PippiCommands.log.\n{str(exc)}")
+            print(f"Failed to create {name}.log.\n{str(exc)}")
             return False
 
         return True
 
-    @staticmethod
-    def get_date(line):
-        try:
-            return datetime.strptime(line[1:24], '%Y.%m.%d-%H.%M.%S:%f')
-        except Exception:
-            return None
+    def get_lines(self, after_date=None):
+        self.chat_lines, self.command_lines = [], []
+        after_date = after_date + timedelta(seconds=1) if after_date else self.after_date
+        # iterate through files from oldest to newest
+        self._populate_lines_cache('ConanSandbox', 'chat')
+        self._populate_lines_cache('Chat', 'chat')
+        self._populate_lines_cache('Commands', 'command')
+        # sort chat lines by datetime (oldest first)
+        self.chat_lines = sorted(self.chat_lines, key=itemgetter('datetime'))
+        self.command_lines = sorted(self.command_lines, key=itemgetter('datetime'))
+
+    def cycle_log_files(self, keep_files=3):
+        names = ['Chat', 'Commands']
+        for name in names:
+            self._cycle_files(keep_files, name)
 
     @staticmethod
-    def get_chat_info(line, date_format=None):
-        """
-        Example Chat
-        [2000.01.01-12.00.00:000][Pippi]PippiChat: Alice said in channel [Alice:Bob]: Hello Bob!
-                                                   ^div_1                          ^div_2
-        """
-        if '[Pippi]PippiChat: ' not in line:
-            return (None, None, None, None, None)
-        div_1 = 43
-        div_2 = line.find(']', div_1)
-        date = ChatLogs.get_date(line)
-        sender, channel = line[div_1:div_2].split(" said in channel [")
-        if ':' in channel:
-            sender, recipient = channel.split(':')
-            channel = 'Whisper'
-        elif channel not in ('Global', 'Local', 'Emote', 'Shout', 'Mumble'):
-            recipient = channel
-            channel = 'Guild'
+    def get_date(data, string_style=True):
+        if string_style:
+            try:
+                return datetime.strptime(data[1:24], '%Y.%m.%d-%H.%M.%S:%f')
+            except Exception:
+                return None
         else:
-            recipient = ''
-        chat = line[div_2+3:-1]
-        if '"' in chat:
-            chat = chat.replace('"', "'")
+            try:
+                return datetime.strptime(data['datetime'], '%Y.%m.%d-%H.%M.%S:%f')
+            except Exception:
+                return None
+
+    @staticmethod
+    def _make_safe(content):
         for c in ';\n\r':
-            if c in chat:
-                chat = chat.replace(c, '')
-        if date_format:
-            return (date.strftime(date_format), sender, recipient, channel, chat)
-        else:
-            return (date, sender, recipient, channel, chat)
+            if c in content:
+                content = content.replace(c, '')
+        return content
+
+    @staticmethod
+    def get_chat_info(data, date_format="%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strftime(data['datetime'], date_format)
+
+            # if data has content attribute it's regular chat
+            if 'content' in data:
+                content = ChatLogs._make_safe(data['content'])
+                return (dt, data['name'], data['channel'], data['type'], content)
+            # otherwise assume it's a command
+            else:
+                return (dt, data['name'], data['source'], data['event_id'], data['params'])
+        except Exception as e:
+            print(e)
 
 
 class Owner:
