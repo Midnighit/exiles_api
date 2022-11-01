@@ -405,7 +405,7 @@ class ChatLogs:
                 return (dt, data['name'], data['channel'], data['type'], content)
             # otherwise assume it's a command
             else:
-                return (dt, data['name'], data['source'], data['event_id'], data['params'])
+                return (dt, data['name'], data['command'], data['type'], data['params'])
         except Exception as e:
             print(e)
 
