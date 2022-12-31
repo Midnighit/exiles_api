@@ -43,19 +43,6 @@ ITER = (list, tuple, set)
 NUMBER = (int, float)
 
 
-def value2iter(value):
-    return (value,) if not isinstance(value, ITER) else value
-
-
-def iter2str(value):
-    if not isinstance(value, ITER):
-        return value
-    if len(value) == 1 and isinstance(value, tuple):
-        return str(value)[1:-2]
-    else:
-        return str(value)[1:-1]
-
-
 def is_running(process_name="ConanSandboxServer", strict=False):
     """Check if there is any running process that contains the given name process_name."""
     # Iterate over the all the running process
@@ -182,6 +169,15 @@ def adjusted_next_due(next_due, mode, balance):
         return next_due + timedelta(days=balance)
     elif frequency == "hourly":
         return next_due + timedelta(hours=balance)
+
+
+def iter2str(value):
+    if not isinstance(value, ITER):
+        return value
+    if len(value) == 1 and isinstance(value, tuple):
+        return str(value)[1:-2]
+    else:
+        return str(value)[1:-1]
 
 
 # RCon
@@ -512,7 +508,7 @@ class Tiles:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        obj = value2iter(object_ids)
+        obj = (object_ids,) if not isinstance(object_ids, ITER) else object_ids
         f = 'fetch'
         session.query(BuildableHealth).filter(BuildableHealth.object_id.in_(obj)).delete(synchronize_session=f)
         session.query(BuildingInstances).filter(BuildingInstances.object_id.in_(obj)).delete(synchronize_session=f)
@@ -550,7 +546,8 @@ class Thralls:
 
     @staticmethod
     def remove(object_ids, autocommit=True):
-        object_ids = value2iter(object_ids)
+        if not isinstance(object_ids, ITER):
+            object_ids = (object_ids,)
         f = 'fetch'
         session.query(CharacterStats).filter(CharacterStats.char_id.in_(object_ids)).delete(synchronize_session=f)
         session.query(Properties).filter(Properties.object_id.in_(object_ids)).delete(synchronize_session=f)
@@ -631,7 +628,9 @@ class TilesManager:
     @staticmethod
     def get_tiles_by_owner(bMult=1, pMult=1, do_round=True):
         # stores all tiles indexed by their respective owners
-        tiles = {}
+        tiles = dict()
+        # store all placeables indexed by their respective owners
+        placeables = dict()
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
         root = set()
         # res has format (object_id, owner_id, count(object_id)) contains only building tiles and their aggregated obj
@@ -641,6 +640,7 @@ class TilesManager:
             # create a new dict entry if owner does not have one yet
             if not res[1] in tiles:
                 tiles[res[1]] = res[2] * bMult
+                placeables[res[1]] = 0
             # add aggregated tiles if one already exists
             else:
                 tiles[res[1]] += res[2] * bMult
@@ -655,13 +655,18 @@ class TilesManager:
                 # if owner is not in tiles (i.e. owner has no building tiles) create a new dict entry
                 if not res[1] in tiles:
                     tiles[res[1]] = pMult
+                    placeables[res[1]] = pMult
                 # otherwise add it to the count
                 else:
                     tiles[res[1]] += pMult
+                    placeables[res[1]] += pMult
+
         if do_round:
-            for owner_id, value in tiles.items():
-                tiles[owner_id] = int(round(value, 0))
-        return tiles
+            for owner_id in tiles.keys():
+                tiles[owner_id] = int(round(tiles[owner_id], 0))
+                placeables[owner_id] = int(round(placeables[owner_id], 0))
+
+        return tiles, placeables
 
     @staticmethod
     def get_tiles_consolidated(bMult=1, pMult=1, min_dist=50000, do_round=True):
@@ -1361,7 +1366,8 @@ class Buildings(GameBase):
 
         thrall_ids = ''
         if owner_ids:
-            owner_ids = value2iter(owner_ids)
+            if not isinstance(owner_ids, ITER):
+                owner_ids = (owner_ids, )
             thrall_id_list = []
             for owner_id in owner_ids:
                 thrall_id = Properties.get_thrall_object_ids(owner_id=owner_id, strict=True)
@@ -1726,7 +1732,8 @@ class Characters(GameBase, Owner):
 
     @staticmethod
     def remove(character_ids, autocommit=True, whitelist=[]):
-        character_ids = value2iter(character_ids)
+        if not isinstance(character_ids, ITER):
+            character_ids = (character_ids,)
         char_ids = []
         for id in character_ids:
             # skip whitelisted chars if whitelist was given
@@ -1758,8 +1765,8 @@ class Characters(GameBase, Owner):
             session.commit()
 
     @staticmethod
-    def move_to_guild(character_id, guild_id, autocommit=True):
-        char = session.query(Characters).get(character_id)
+    def move_to_guild(char_id, guild_id, autocommit=True):
+        char = session.query(Characters).get(char_id)
         guild = session.query(Guilds).get(guild_id)
         if char and guild:
             char.guild = guild
@@ -1767,13 +1774,14 @@ class Characters(GameBase, Owner):
                 session.commit()
 
     @staticmethod
-    def set_last_login(character_ids, date=None, autocommit=True):
+    def set_last_login(char_ids, date=None, autocommit=True):
         if not date:
             ts = floor(datetime.utcnow().timestamp())
         else:
             ts = floor(date.timestamp())
-        character_ids = value2iter(character_ids)
-        for char_id in character_ids:
+        if not isinstance(char_ids, ITER):
+            char_ids = (char_ids,)
+        for char_id in char_ids:
             char = session.query(Characters).get(char_id)
             if char and ts:
                 char.last_login = ts
@@ -1910,7 +1918,8 @@ class ItemInventory(GameBase):
 
     @staticmethod
     def remove(template_ids=None, autocommit=True):
-        template_ids = value2iter(template_ids)
+        if not isinstance(template_ids, ITER):
+            template_ids = (template_ids,)
         f = 'fetch'
         session.query(ItemInventory).filter(ItemInventory.template_id.in_(template_ids)).delete(synchronize_session=f)
         if autocommit:
@@ -2169,7 +2178,8 @@ class Properties(GameBase):
     def give_thrall(object_ids, owner_id, autocommit=True):
         if object_ids is None:
             return None
-        object_ids = value2iter(object_ids)
+        if not isinstance(object_ids, ITER):
+            object_ids = (object_ids,)
         for object_id in object_ids:
             filter = (Properties.object_id == object_id) & (Properties.name.like('%OwnerUniqueId'))
             p = session.query(Properties).filter(filter).first()
