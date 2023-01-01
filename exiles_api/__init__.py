@@ -627,8 +627,8 @@ class PropertiesList(tuple):
 class TilesManager:
     @staticmethod
     def get_tiles_by_owner(bMult=1, pMult=1, do_round=True):
-        # stores all tiles indexed by their respective owners
-        tiles = dict()
+        # stores all building pieces indexed by their respective owners
+        building_pieces = dict()
         # store all placeables indexed by their respective owners
         placeables = dict()
         # tiles that have an object_id in both Buildings and BuildingInstances are root object building tiles
@@ -638,35 +638,34 @@ class TilesManager:
                           .filter(Buildings.object_id == BuildingInstances.object_id) \
                           .group_by(Buildings.object_id).all():
             # create a new dict entry if owner does not have one yet
-            if not res[1] in tiles:
-                tiles[res[1]] = res[2] * bMult
+            if not res[1] in building_pieces:
+                building_pieces[res[1]] = res[2] * bMult
                 placeables[res[1]] = 0
             # add aggregated tiles if one already exists
             else:
-                tiles[res[1]] += res[2] * bMult
+                building_pieces[res[1]] += res[2] * bMult
             # remember the object_id as root object in either case
             root.add(res[0])
-        
+
         # res has format: (object_id, owner_id) contains all building tiles and placeables
         for res in session.query(Buildings.object_id, Buildings.owner_id) \
                           .filter(Buildings.object_id == ActorPosition.id).all():
             # if object is not a root object, it is a placeable and needs to be added now
             if not res[0] in root:
                 # if owner is not in tiles (i.e. owner has no building tiles) create a new dict entry
-                if not res[1] in tiles:
-                    tiles[res[1]] = pMult
+                if not res[1] in building_pieces:
+                    building_pieces[res[1]] = 0
                     placeables[res[1]] = pMult
                 # otherwise add it to the count
                 else:
-                    tiles[res[1]] += pMult
                     placeables[res[1]] += pMult
 
         if do_round:
-            for owner_id in tiles.keys():
-                tiles[owner_id] = int(round(tiles[owner_id], 0))
+            for owner_id in building_pieces.keys():
+                building_pieces[owner_id] = int(round(building_pieces[owner_id], 0))
                 placeables[owner_id] = int(round(placeables[owner_id], 0))
 
-        return tiles, placeables
+        return building_pieces, placeables
 
     @staticmethod
     def get_tiles_consolidated(bMult=1, pMult=1, min_dist=50000, do_round=True):
