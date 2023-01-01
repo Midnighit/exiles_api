@@ -646,7 +646,7 @@ class TilesManager:
                 tiles[res[1]] += res[2] * bMult
             # remember the object_id as root object in either case
             root.add(res[0])
-
+        
         # res has format: (object_id, owner_id) contains all building tiles and placeables
         for res in session.query(Buildings.object_id, Buildings.owner_id) \
                           .filter(Buildings.object_id == ActorPosition.id).all():
@@ -673,8 +673,8 @@ class TilesManager:
         AP = ActorPosition
         B = Buildings
         BI = BuildingInstances
-        tiles_to_consolidate = {}
-        owner_index = {}
+        tiles_to_consolidate = dict()
+        owner_index = dict()
         query = (AP.x, AP.y, AP.z, AP.class_, B.object_id, B.owner_id, func.count(B.object_id))
         filter = (AP.id == B.object_id) & (B.object_id == BI.object_id)
         # get all Building pieces and their associated coordiantes and owners excluding pure placeables
@@ -682,7 +682,14 @@ class TilesManager:
         for x, y, z, class_, object_id, owner_id, tiles in tiles.all():
             _, _, c = class_.partition('.')
             tiles_to_consolidate[object_id] = {
-                'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': tiles * bMult
+                'x': x,
+                'y': y,
+                'z': z,
+                'class': c,
+                'owner_id': owner_id,
+                'tiles': tiles * bMult,
+                'building_pieces': tiles * bMult,
+                'placeables': 0
             }
             # keep a second dict to allow us to find all the objects belonging to an object_id
             if owner_id in owner_index:
@@ -698,15 +705,28 @@ class TilesManager:
             if object_id in tiles_to_consolidate:
                 continue
             _, _, c = class_.partition('.')
-            tiles_to_consolidate[object_id] = {'x': x, 'y': y, 'z': z, 'class': c, 'owner_id': owner_id, 'tiles': pMult}
+            tiles_to_consolidate[object_id] = {
+                'x': x,
+                'y': y,
+                'z': z,
+                'class': c,
+                'owner_id': owner_id,
+                'tiles': pMult,
+                'building_pieces': 0,
+                'placeables': pMult
+            }
             # update the owner_index with the placeables
             if owner_id in owner_index:
                 owner_index[owner_id] += [object_id]
             else:
                 owner_index[owner_id] = [object_id]
 
-        tiles_consolidated = {}
-        tiles_per_owner = {}
+        tiles_consolidated = dict()
+        tiles_per_owner = dict()
+        building_pieces_per_owner = dict()
+        placeables_per_owner = dict()
+        bp = 'building_pieces'
+        p = 'placeables'
         # do the consolidating
         for owner_id, object_ids in owner_index.items():
             # remember which objects were within min_dist of another
@@ -730,15 +750,24 @@ class TilesManager:
                     if dist <= min_dist:
                         remove.add(object_ids[j])
                         tiles_consolidated[object_ids[i]]['tiles'] += tiles_to_consolidate[object_ids[j]]['tiles']
+                        tiles_consolidated[object_ids[i]][bp] += tiles_to_consolidate[object_ids[j]][bp]
+                        tiles_consolidated[object_ids[i]][p] += tiles_to_consolidate[object_ids[j]][p]
+
                 # for each owner store the absolute number of tiles to tiles_per_owner
                 if owner_id in tiles_per_owner:
                     tiles_per_owner[owner_id] += tiles_consolidated[object_ids[i]]['tiles']
+                    building_pieces_per_owner[owner_id] += tiles_consolidated[object_ids[i]][bp]
+                    placeables_per_owner[owner_id] += tiles_consolidated[object_ids[i]][p]
                 else:
                     tiles_per_owner[owner_id] = tiles_consolidated[object_ids[i]]['tiles']
+                    building_pieces_per_owner[owner_id] = tiles_consolidated[object_ids[i]][bp]
+                    placeables_per_owner[owner_id] = tiles_consolidated[object_ids[i]][p]
 
         # go through all consolidated objects and add the absolute number of tiles for that owner
         for object_id, ctd in tiles_consolidated.items():
             ctd['sum_tiles'] = tiles_per_owner[ctd['owner_id']]
+            ctd['sum_building_pieces'] = building_pieces_per_owner[ctd['owner_id']]
+            ctd['sum_placeables'] = placeables_per_owner[ctd['owner_id']]
 
         return tiles_consolidated
 
@@ -778,7 +807,7 @@ class MembersManager:
 
     @classmethod
     def get_members(cls, td=None, d=datetime.utcnow(), buildings=True):
-        members = {}
+        members = dict()
         threshold = int((d - td).timestamp()) if td is not None else 0
         owners = set()
         for g in cls._get_guilds_query(0, buildings).all():
