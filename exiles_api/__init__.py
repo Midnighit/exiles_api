@@ -473,6 +473,9 @@ class Owner:
                 Buildings.owner_id == self.id, Buildings.object_id == BuildingInstances.object_id
             ).all()
         )
+        if pMult == 0:
+            return bTiles
+
         pTiles = tuple(
             Placeables(owner_id=self.id,
                        object_id=res[0],
