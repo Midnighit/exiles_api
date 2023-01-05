@@ -2895,5 +2895,17 @@ class Boatbucks(UsersBase):
         return f"<Boatbucks(id={self.id}, bucks={self.bucks})>"
 
 
+class OpenAI(UsersBase):
+    __tablename__ = 'open_ai'
+    __bind_key__ = 'usersdb'
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    personality = Column(String, nullable=False)
+    text = Column(String, default='')
+
+    def __repr__(self):
+        return f"<OpenAI(id={self.id}, personality={self.personality}, text={self.text})>"
+
+
 GameBase.metadata.create_all(engines['gamedb'])
 UsersBase.metadata.create_all(engines['usersdb'])
