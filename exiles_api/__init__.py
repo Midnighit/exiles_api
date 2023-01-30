@@ -1946,6 +1946,7 @@ class ItemInventory(GameBase):
 
     item_id = Column(Integer, primary_key=True, nullable=False)
     owner_id = Column(Integer, primary_key=True, nullable=False)
+    inv_type = Column(Integer, primary_key=True, nullable=False)
 
     @staticmethod
     def remove(template_ids=None, autocommit=True):
@@ -1981,7 +1982,7 @@ class ItemProperties(GameBase):
     inv_type = Column(Integer, primary_key=True, nullable=False)
 
     def __repr__(self):
-        return f"<ItemInventory(item_id={self.item_id}, owner_id={self.owner_id}, inv_type={self.inv_type})>"
+        return f"<ItemProperties(item_id={self.item_id}, owner_id={self.owner_id}, inv_type={self.inv_type})>"
 
 
 class Properties(GameBase):
