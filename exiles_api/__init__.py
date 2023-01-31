@@ -946,7 +946,7 @@ class Stats:
         wealth, wealth_inactive, wealth_active, guild_wealth = [], [], [], 0
         # character wealth includes all wealth tied directly to a character or thespians they own
         for c in session.query(C).order_by(C._last_login.desc()).all():
-            bronze = Properties.get_pippi_money(char_id=c.id, as_number=True)
+            bronze = Properties.get_pippi_money(character_id=c.id, as_number=True)
             # try to exclude admin/support chars with access to the cheat menu from the statistics
             if c.slot == 'active' or c.slot in ('1', '2'):
                 wealth.append(bronze)
@@ -1750,7 +1750,7 @@ class Characters(GameBase, Owner):
 
     @property
     def money(self):
-        return Properties.get_pippi_money(char_id=self.id, as_number=True)
+        return Properties.get_pippi_money(character_id=self.id, as_number=True)
 
     @staticmethod
     def get_users(value):
@@ -1796,8 +1796,8 @@ class Characters(GameBase, Owner):
             session.commit()
 
     @staticmethod
-    def move_to_guild(char_id, guild_id, autocommit=True):
-        char = session.query(Characters).get(char_id)
+    def move_to_guild(character_id, guild_id, autocommit=True):
+        char = session.query(Characters).get(character_id)
         guild = session.query(Guilds).get(guild_id)
         if char and guild:
             char.guild = guild
@@ -1805,15 +1805,15 @@ class Characters(GameBase, Owner):
                 session.commit()
 
     @staticmethod
-    def set_last_login(char_ids, date=None, autocommit=True):
+    def set_last_login(character_ids, date=None, autocommit=True):
         if not date:
             ts = floor(datetime.utcnow().timestamp())
         else:
             ts = floor(date.timestamp())
-        if not isinstance(char_ids, ITER):
-            char_ids = (char_ids,)
-        for char_id in char_ids:
-            char = session.query(Characters).get(char_id)
+        if not isinstance(character_ids, ITER):
+            character_ids = (character_ids,)
+        for character_id in character_ids:
+            char = session.query(Characters).get(character_id)
             if char and ts:
                 char.last_login = ts
         if autocommit:
@@ -2127,10 +2127,10 @@ class Properties(GameBase):
         return owners
 
     @staticmethod
-    def get_pippi_money(name=None, char_id=None, guild_id=None, with_chars=True, with_thespians=True, as_number=False):
+    def get_pippi_money(name=None, character_id=None, guild_id=None, with_chars=True, with_thespians=True, as_number=False):    # noqa
 
-        # if char_id was given, ensure that there's actually a character with that id.
-        if char_id and not session.query(Characters).get(char_id):
+        # if character_id was given, ensure that there's actually a character with that id.
+        if character_id and not session.query(Characters).get(character_id):
             return None
 
         # if guild_id was given, ensure that there's actually a guild with that id.
@@ -2144,18 +2144,18 @@ class Properties(GameBase):
             if len(owners) != 1:
                 return None
             if owners[0].is_character:
-                char_id = owners[0].id
+                character_id = owners[0].id
             elif owners[0].is_guild:
                 guild_id = owners[0].id
 
-        # at this point either char_id or guild_id must be known
-        elif not char_id and not guild_id:
+        # at this point either character_id or guild_id must be known
+        elif not character_id and not guild_id:
             return None
 
         p_name = "Pippi_WalletComponent_C.walletAmount"
-        # if char_id is known determine Pippi money for that char
-        if char_id:
-            p = session.query(Properties).filter_by(object_id=char_id, name=p_name).first()
+        # if character_id is known determine Pippi money for that char
+        if character_id:
+            p = session.query(Properties).filter_by(object_id=character_id, name=p_name).first()
             # if owner exists but they don't have a wallet, return 0
             money = p.money if p else 0
             # if with_thespians is True include all thespians belonging to the character to the total Pippi money
@@ -2163,7 +2163,7 @@ class Properties(GameBase):
                 query = (
                     session.query(Properties).
                     filter(Buildings.object_id == Properties.object_id).
-                    filter(Buildings.owner_id == char_id).
+                    filter(Buildings.owner_id == character_id).
                     filter(Properties.name == p_name)
                 )
                 # for each thespian owned by the char add their money to the chars own money
@@ -2180,7 +2180,7 @@ class Properties(GameBase):
                 guild = session.query(Guilds).get(guild_id)
                 for member in guild.members:
                     add_money = Properties.get_pippi_money(
-                        char_id=member.id,
+                        character_id=member.id,
                         with_thespians=with_thespians,
                         as_number=as_number
                     )
