@@ -102,14 +102,20 @@ def make_instance_db(
     inverse_mods=False,
     mod_names=None
 ):
-    guild_ids = []
-    char_ids = []
+    # if owner_ids are given, get all those and put them into guild_ids and char_ids respectively
     if owner_ids:
+        guild_ids = []
+        char_ids = []
         for owner_id in owner_ids:
             if session.query(Characters).get(owner_id):
                 char_ids.append(owner_id)
             elif session.query(Guilds).get(owner_id):
                 guild_ids.append(owner_id)
+
+    # preserve whether owner_ids is None or an empty list
+    elif owner_ids is None:
+        guild_ids = owner_ids
+        char_ids = owner_ids
 
     print("Copying mods...")
     Mods.copy(source_db, dest_db, mod_names, inverse_mods)
@@ -1272,9 +1278,10 @@ class Buildings(GameBase):
 
     @staticmethod
     def _get_objects_query(owner_ids=None, loc=None, inverse=False, attach=None):
-        # If no owners are given and selection isn't inverted, no objects need to be copied
-        if not owner_ids and not inverse:
+        # If owner_ids is empty and selection isn't inverted, no objects need to be copied
+        if not owner_ids and owner_ids is not None and not inverse:
             return None
+
         attach = attach + '.' if attach else ''
         # The SELECT clause is always the same
         query_list = ["SELECT object_id"]
@@ -1318,7 +1325,8 @@ class Buildings(GameBase):
                 where_list.append(f"owner_id IN ({o_ids})")
             else:
                 where_list.append(f"owner_id NOT IN ({o_ids}, 0)")
-        else:
+        # owner_ids being None as opposed to an empty list is a special case and means all owners
+        elif owner_ids is not None:
             # avoid deleting the game internal buildings belonging to owner_id 0
             where_list.append("owner_id != 0")
         if len(where_list) > 0:
@@ -1566,8 +1574,8 @@ class Guilds(GameBase, Owner):
 
     @staticmethod
     def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, with_chars=False, with_alts=False, inverse=False):  # noqa
-        # copy without owner_ids means copy all guilds the inverse of that is no guilds
-        if owner_ids is None and inverse:
+        # If owner_ids is empty and selection isn't inverted, no guilds need to be copied
+        if not owner_ids and owner_ids is not None and not inverse:
             return None
 
         # generate an appropriate WHERE clause
@@ -1646,7 +1654,7 @@ class Guilds(GameBase, Owner):
                 conn.execute(
                     f"CREATE TEMPORARY TABLE acc AS SELECT DISTINCT {acc_id} FROM src.characters {char_filter('id')}"
                 )
-                if with_alts:
+                if with_alts and owner_ids is not None:
                     query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
                     char_ids = tuple(id for id, in query.all())
                 conn.execute(f"DELETE FROM account WHERE id IN ({slf} acc)")
@@ -1821,12 +1829,8 @@ class Characters(GameBase, Owner):
 
     @staticmethod
     def copy(source_db=BACKUP_DB, dest_db=GAME_DB, owner_ids=None, with_alts=False, inverse=False):
-        # copy without owner_ids means copy all characters the inverse of that is no characters
-        if owner_ids is None and inverse:
-            return None
-
-        # copy with owner_ids as an empty list means literally no chars unless inverted
-        if not owner_ids and not inverse:
+        # If owner_ids is empty and selection isn't inverted, no characters need to be copied
+        if not owner_ids and owner_ids is not None and not inverse:
             return None
 
         # generate an appropriate WHERE clause
@@ -1869,8 +1873,8 @@ class Characters(GameBase, Owner):
             conn.execute(
                 f"CREATE TEMPORARY TABLE acc AS SELECT DISTINCT {acc_id} FROM src.characters {owner_filter('id')}"
             )
-            # Extend owner_ids to all chars with a matching account id
-            if with_alts:
+            # Extend owner_ids to all chars with a matching account id unless all characters are already selected
+            if with_alts and owner_ids is not None:
                 query = conn.execute(f"SELECT id FROM src.characters WHERE {acc_id} IN ({slf} acc)")
                 owner_ids = tuple(id for id, in query.all())
             # Delete conflicting objects in the destination db if they exist
