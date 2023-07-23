@@ -1700,7 +1700,10 @@ class Characters(GameBase, Owner):
 
     @property
     def user(self):
-        return session.query(Users).filter_by(funcom_id=self.account.funcom_id).first()
+        account = self.account
+        if account:
+            return session.query(Users).filter_by(funcom_id=self.account.funcom_id).first()
+        return None
 
     @property
     def pure_player_id(self):
