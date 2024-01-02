@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker, Session, relationship, backref
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import create_engine, literal, desc, MetaData, exc as sa_exc
-from sqlalchemy import Column, ForeignKey, func, distinct, Text, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, ForeignKey, or_, func, distinct, Text, Integer, String, DateTime, Boolean
 from config import GAME_DB_URI, ECHO, USERS_DB_URI, SAVED_DIR_PATH, EXE_DIR_PATH, GAME_DB, BACKUP_DB
 
 GameBase = declarative_base()
@@ -2440,7 +2440,9 @@ class Users(UsersBase):
             result = session.query(Users).filter(Users.disc_user.collate('NOCASE') == value).first()
             if result:
                 return [result]
-        result = session.query(Users).filter(Users.disc_user.like((value + '#____'))).first()
+        result = session.query(Users).filter(or_(
+            Users.disc_user.like((value + '#____')), Users.disc_user.like((value + '#0'))
+        )).first()
         if result:
             return [result]
         results = [u for u in session.query(Users).filter(Users.disc_user.like(('%' + value + '%#____'))).all()]
