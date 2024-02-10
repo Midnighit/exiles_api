@@ -2894,15 +2894,15 @@ class Groups(UsersBase):
         return f"<Groups(id={self.id}, name='{self.name}')>"
 
 
-class Boatbucks(UsersBase):
-    __tablename__ = 'boatbucks'
+class Dubloons(UsersBase):
+    __tablename__ = 'dubloons'
     __bind_key__ = 'usersdb'
 
     id = Column(Integer, primary_key=True)
-    bucks = Column(Integer, default=0)
+    dubloons = Column(Integer, default=0)
 
     def __repr__(self):
-        return f"<Boatbucks(id={self.id}, bucks={self.bucks})>"
+        return f"<dubloons(id={self.id}, dubloons={self.dubloons})>"
 
 
 class OpenAI(UsersBase):
