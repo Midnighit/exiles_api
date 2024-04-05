@@ -1223,11 +1223,15 @@ class BuildableHealth(GameBase):
 
     object_id = Column(Integer, ForeignKey('actor_position.id'), primary_key=True, nullable=False)
     instance_id = Column(Integer, ForeignKey('buildable_health.instance_id'), primary_key=True, nullable=False)
+    health_id = Column(Integer, primary_key=True)
     template_id = Column(Integer, primary_key=True)
 
     def __repr__(self):
+        oid = self.object_id
+        iid = self.instance_id
+        hid = self.health_id
         tid = self.template_id
-        return f"<BuildableHealth(object_id={self.object_id}, instance_id={self.instance_id}, template_id={tid})>"
+        return f"<BuildableHealth(object_id={oid}, instance_id={iid}, health_id={hid}, template_id={tid})>"
 
 
 class BuildingInstances(GameBase):
